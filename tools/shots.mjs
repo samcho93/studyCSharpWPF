@@ -34,12 +34,13 @@ for (const id of list) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename: id + '.js' });
   const ch = course.chapters[id];
   if (!ch) continue;
-  if (ch.previewCode && isWpf(ch.previewCode)) items.push({ id: `${id}-final`, code: ch.previewCode, delay: ch.previewDelay || 900 });
+  const D = 1500;   // 창이 뜬 뒤 캡처까지 기다리는 시간(ms) — 예제에 shotDelay 로 바꿀 수 있다
+  if (ch.previewCode && isWpf(ch.previewCode)) items.push({ id: `${id}-final`, code: ch.previewCode, delay: ch.previewDelay || D });
   for (const s of ch.sections) {
     let n = 0;
-    (s.content || []).forEach((b) => { if (b.type === 'code' && b.run !== false && isWpf(b.code)) { items.push({ id: `${s.id}-${n}`, code: b.code, delay: b.shotDelay || 900 }); n++; } });
-    (s.practice || []).forEach((p, i) => { if (p.solution && isWpf(p.solution)) items.push({ id: `${s.id}-p${i}`, code: p.solution, delay: p.shotDelay || 900 }); });
-    (s.slides || []).forEach((sl, i) => { if (sl.layout === 'code' && sl.run !== false && isWpf(sl.code)) items.push({ id: `${s.id}-s${i}`, code: sl.code, delay: sl.shotDelay || 900 }); });
+    (s.content || []).forEach((b) => { if (b.type === 'code' && b.run !== false && isWpf(b.code)) { items.push({ id: `${s.id}-${n}`, code: b.code, delay: b.shotDelay || D }); n++; } });
+    (s.practice || []).forEach((p, i) => { if (p.solution && isWpf(p.solution)) items.push({ id: `${s.id}-p${i}`, code: p.solution, delay: p.shotDelay || D }); });
+    (s.slides || []).forEach((sl, i) => { if (sl.layout === 'code' && sl.run !== false && isWpf(sl.code)) items.push({ id: `${s.id}-s${i}`, code: sl.code, delay: sl.shotDelay || D }); });
   }
 }
 const todo = items.filter((it) => (only ? it.id === only : true) && (force || !existing.has(it.id) || !fs.existsSync(path.join(OUT, it.id + '.png'))));

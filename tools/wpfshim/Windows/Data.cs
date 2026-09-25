@@ -102,13 +102,24 @@ namespace System.Windows.Data
 
         internal void OnDataContextChanged() { Refresh(); }
 
+        private readonly List<UIElement> _elSubs = new List<UIElement>();
+        private bool _waitLoaded, _oneTimeDone, _reportedMissing;
+
         /// <summary>원본을 다시 찾고 대상 속성을 갱신한다</summary>
         internal void Refresh()
         {
             foreach (var (o, _) in _subs) o.PropertyChanged -= OnSourcePropertyChanged;
             _subs.Clear();
+            foreach (var u in _elSubs) u.LocalPropertyChanged -= OnElementPropertyChanged;
+            _elSubs.Clear();
+            if (ParentBinding.Mode == BindingMode.OneTime && _oneTimeDone) return;   // OneTime: 처음 한 번만
             if (ParentBinding.Source != null) _source = ParentBinding.Source;
-            else if (ParentBinding.ElementName != null) _source = Target.FindName(ParentBinding.ElementName) ?? FindByName(ParentBinding.ElementName);
+            else if (ParentBinding.ElementName != null)
+            {
+                _source = Target.FindName(ParentBinding.ElementName) ?? FindByName(ParentBinding.ElementName);
+                // XAML 에서 뒤에 선언된 요소를 가리키면 아직 없다 → 창이 뜰 때(Loaded) 다시 찾는다
+                if (_source == null && !_waitLoaded) { _waitLoaded = true; Target.Loaded += (s, e) => Refresh(); }
+            }
             else if (ParentBinding.RelativeSource != null)
             {
                 var rs = ParentBinding.RelativeSource;
@@ -116,18 +127,27 @@ namespace System.Windows.Data
                 else if (rs.Mode == RelativeSourceMode.FindAncestor) { FrameworkElement? e = Target.ParentElement; int lv = rs.AncestorLevel; while (e != null) { if (rs.AncestorType == null || rs.AncestorType.IsInstanceOfType(e)) { if (--lv <= 0) break; } e = e.ParentElement; } _source = e; }
                 else _source = Target.DataContext;
             }
+            // DataContext 자체를 바인딩하면 원본은 부모의 DataContext (자기 자신이 아니다)
+            else if (TargetProperty == "DataContext") _source = Target.ParentElement?.DataContext;
             else _source = Target.DataContext;
             if (ParentBinding.Mode != BindingMode.OneWayToSource) UpdateTarget();
-            // 경로상의 각 객체를 구독
+            if (ParentBinding.Mode == BindingMode.OneTime) { _oneTimeDone = _source != null; return; }
+            // 경로상의 각 객체를 구독 (데이터 객체는 INotifyPropertyChanged, 요소는 속성 변경 알림)
             var parts = SplitPath(ParentBinding.Path);
             object? cur = _source;
             for (int i = 0; i < parts.Count; i++)
             {
                 if (cur is INotifyPropertyChanged n) { n.PropertyChanged += OnSourcePropertyChanged; _subs.Add((n, parts[i])); }
+                if (cur is UIElement ue) { ue.LocalPropertyChanged += OnElementPropertyChanged; _elSubs.Add(ue); }
                 if (cur == null) break;
                 cur = GetMember(cur, parts[i]);
             }
             if (parts.Count == 0 && cur is INotifyPropertyChanged n0) { n0.PropertyChanged += OnSourcePropertyChanged; _subs.Add((n0, "")); }
+        }
+        private void OnElementPropertyChanged(string name)
+        {
+            if (_updating) return;
+            if (SplitPath(ParentBinding.Path).Contains(name)) Refresh();
         }
         private static object? FindByName(string name)
         {
@@ -155,7 +175,18 @@ namespace System.Windows.Data
                 {
                     var parts = SplitPath(ParentBinding.Path);
                     object? cur = _source;
-                    foreach (var p in parts) { if (cur == null) { resolved = false; break; } cur = GetMember(cur, p); }
+                    foreach (var p in parts)
+                    {
+                        if (cur == null) { resolved = false; break; }
+                        if (!TryGetMember(cur, p, out var next))
+                        {
+                            // 경로 오류 (속성 이름 오타 등): 실제 WPF 는 출력 창에 알리고 FallbackValue 를 쓴다
+                            resolved = false;
+                            if (!_reportedMissing) { _reportedMissing = true; Bridge.Write(2, $"[바인딩 오류] '{p}' 속성을 {cur.GetType().Name} 에서 찾을 수 없습니다 (Path={ParentBinding.Path}, 대상 {Target.GetType().Name}.{TargetProperty})\n"); }
+                            break;
+                        }
+                        cur = next;
+                    }
                     v = resolved ? cur : null;
                 }
                 var targetType = TargetType();
@@ -232,25 +263,26 @@ namespace System.Windows.Data
             if (cur.Length > 0) parts.Add(cur);
             return parts;
         }
-        internal static object? GetMember(object? obj, string name)
+        internal static object? GetMember(object? obj, string name) => obj != null && TryGetMember(obj, name, out var v) ? v : null;
+
+        /// <summary>경로 한 단계. 실제 WPF 처럼 public 속성만 바인딩할 수 있다 (필드는 찾지 못함으로 처리)</summary>
+        internal static bool TryGetMember(object obj, string name, out object? value)
         {
-            if (obj == null) return null;
+            value = null;
             if (name.StartsWith("["))
             {
                 var key = name.Trim('[', ']');
-                if (obj is IList list && int.TryParse(key, out var idx)) return idx >= 0 && idx < list.Count ? list[idx] : null;
-                if (obj is IDictionary dict) return dict.Contains(key) ? dict[key] : null;
+                if (obj is IList list && int.TryParse(key, out var idx)) { value = idx >= 0 && idx < list.Count ? list[idx] : null; return true; }
+                if (obj is IDictionary dict) { value = dict.Contains(key) ? dict[key] : null; return true; }
                 var indexer = obj.GetType().GetProperty("Item", new[] { typeof(string) });
-                if (indexer != null) return indexer.GetValue(obj, new object[] { key });
-                return null;
+                if (indexer != null) { value = indexer.GetValue(obj, new object[] { key }); return true; }
+                return false;
             }
             var t = obj.GetType();
             var pi = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-            if (pi != null) return pi.GetValue(obj);
-            var fi = t.GetField(name, BindingFlags.Public | BindingFlags.Instance);
-            if (fi != null) return fi.GetValue(obj);
-            if (obj is UIElement el) return el.GetAttached(name);
-            return null;
+            if (pi != null && pi.GetIndexParameters().Length == 0) { value = pi.GetValue(obj); return true; }
+            if (obj is UIElement el && el.GetAttached(name) is object av) { value = av; return true; }
+            return false;
         }
         public static object? GetPathValue(object? source, string path)
         {
@@ -315,12 +347,19 @@ namespace System.Windows.Data
         public static bool IsDataBound(DependencyObject target, DependencyProperty dp) => GetBindingExpression(target, dp) != null;
     }
 
-    /// <summary>CollectionViewSource 간이 구현: 필터 · 정렬 후의 목록을 View 로 제공</summary>
+    /// <summary>CollectionViewSource 간이 구현: 필터 · 정렬 후의 목록을 View 로 제공 (원본마다 같은 뷰를 돌려준다)</summary>
     public class CollectionViewSource
     {
-        public IEnumerable? Source { get; set; }
-        public ListCollectionView View => new ListCollectionView(Source ?? Array.Empty<object>());
-        public static ICollectionView GetDefaultView(object? source) => new ListCollectionView(source as IEnumerable ?? Array.Empty<object>());
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, ListCollectionView> _views = new System.Runtime.CompilerServices.ConditionalWeakTable<object, ListCollectionView>();
+        private IEnumerable? _source; private ListCollectionView? _view;
+        public IEnumerable? Source { get => _source; set { _source = value; _view = null; } }
+        public ICollectionView View => _view ??= new ListCollectionView(Source ?? Array.Empty<object>());
+        public static ICollectionView GetDefaultView(object? source)
+        {
+            if (source is ICollectionView v) return v;
+            if (source == null) return new ListCollectionView(Array.Empty<object>());
+            return _views.GetValue(source, s => new ListCollectionView(s as IEnumerable ?? Array.Empty<object>()));
+        }
     }
     public interface ICollectionView : IEnumerable
     {
@@ -335,13 +374,28 @@ namespace System.Windows.Data
         int CurrentPosition { get; }
         SortDescriptionCollection SortDescriptions { get; }
     }
-    public class SortDescription { public string PropertyName { get; } public ListSortDirection Direction { get; } public SortDescription(string p, ListSortDirection d) { PropertyName = p; Direction = d; } }
-    public class SortDescriptionCollection : List<SortDescription> { }
+    public struct SortDescription { public string PropertyName { get; } public ListSortDirection Direction { get; } public SortDescription(string p, ListSortDirection d) { PropertyName = p; Direction = d; } }
+    /// <summary>정렬 기준 목록: 바뀌면 뷰가 다시 정렬된다</summary>
+    public class SortDescriptionCollection : System.Collections.ObjectModel.Collection<SortDescription>
+    {
+        internal Action? Changed;
+        protected override void InsertItem(int index, SortDescription item) { base.InsertItem(index, item); Changed?.Invoke(); }
+        protected override void RemoveItem(int index) { base.RemoveItem(index); Changed?.Invoke(); }
+        protected override void SetItem(int index, SortDescription item) { base.SetItem(index, item); Changed?.Invoke(); }
+        protected override void ClearItems() { base.ClearItems(); Changed?.Invoke(); }
+    }
     public class ListCollectionView : ICollectionView, INotifyCollectionChanged
     {
         private readonly IEnumerable _src;
-        public ListCollectionView(IEnumerable src) { _src = src; if (src is INotifyCollectionChanged n) n.CollectionChanged += (s, e) => Refresh(); }
-        public Predicate<object>? Filter { get; set; }
+        private Predicate<object>? _filter;
+        public ListCollectionView(IEnumerable src)
+        {
+            _src = src;
+            if (src is INotifyCollectionChanged n) n.CollectionChanged += (s, e) => Refresh();
+            SortDescriptions.Changed = Refresh;
+        }
+        /// <summary>실제 WPF 처럼 Filter 를 바꾸면 바로 다시 거른다</summary>
+        public Predicate<object>? Filter { get => _filter; set { _filter = value; Refresh(); } }
         public SortDescriptionCollection SortDescriptions { get; } = new SortDescriptionCollection();
         public object? CurrentItem { get; private set; }
         public int CurrentPosition { get; private set; } = -1;

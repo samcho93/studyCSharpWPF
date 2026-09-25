@@ -96,7 +96,11 @@ namespace System.Windows.Input
         }
         internal static void Fill(MouseEventArgs e, UIElement sender, JsonElement a)
         {
-            e.Sender = sender; e.Source = sender; e.OriginalSource = sender;
+            e.Sender = sender;
+            // 실제로 마우스가 눌린 가장 안쪽 요소 (Canvas 의 처리기에서 e.Source 로 클릭한 도형을 알 수 있다)
+            var src = (int)UIElement.D(a, "src");
+            var hit = src > 0 ? UiTree.Get(src) : null;
+            e.Source = hit ?? sender; e.OriginalSource = hit ?? sender;
             e.X = UIElement.D(a, "x"); e.Y = UIElement.D(a, "y"); e.WX = UIElement.D(a, "wx"); e.WY = UIElement.D(a, "wy");
             var buttons = (int)UIElement.D(a, "buttons");
             e.LeftButton = (buttons & 1) != 0 ? MouseButtonState.Pressed : MouseButtonState.Released;
@@ -282,8 +286,11 @@ namespace System.Windows.Input
     }
     public class KeyBinding : InputBinding
     {
-        public Key Key { get; set; }
-        public ModifierKeys Modifiers { get; set; }
+        private Key _key; private ModifierKeys _mods;
+        // XAML 의 Key="S" Modifiers="Control" 도 제스처가 되도록 두 속성이 Gesture 를 갱신한다
+        public Key Key { get => _key; set { _key = value; Gesture = new KeyGesture(_key, _mods); } }
+        public ModifierKeys Modifiers { get => _mods; set { _mods = value; Gesture = new KeyGesture(_key, _mods); } }
+        public new InputGesture? Gesture { get => base.Gesture; set { base.Gesture = value; if (value is KeyGesture kg) { _key = kg.Key; _mods = kg.Modifiers; } } }
         public KeyBinding() { }
         public KeyBinding(ICommand c, Key k, ModifierKeys m) { Command = c; Key = k; Modifiers = m; Gesture = new KeyGesture(k, m); }
         public KeyBinding(ICommand c, KeyGesture g) { Command = c; Key = g.Key; Modifiers = g.Modifiers; Gesture = g; }
@@ -346,26 +353,47 @@ namespace System.Windows.Input
         public RoutedUICommand(string text, string name, Type ownerType, InputGestureCollection gestures) : base(name, ownerType, gestures) { Text = text; }
     }
     public class InputGestureCollection : List<InputGesture> { }
+    /// <summary>기본 명령과 기본 단축키 (실제 WPF 와 같은 제스처)</summary>
     public static class ApplicationCommands
     {
-        public static RoutedUICommand New { get; } = new RoutedUICommand("새로 만들기", "New", typeof(ApplicationCommands));
-        public static RoutedUICommand Open { get; } = new RoutedUICommand("열기", "Open", typeof(ApplicationCommands));
-        public static RoutedUICommand Save { get; } = new RoutedUICommand("저장", "Save", typeof(ApplicationCommands));
-        public static RoutedUICommand SaveAs { get; } = new RoutedUICommand("다른 이름으로 저장", "SaveAs", typeof(ApplicationCommands));
-        public static RoutedUICommand Close { get; } = new RoutedUICommand("닫기", "Close", typeof(ApplicationCommands));
-        public static RoutedUICommand Print { get; } = new RoutedUICommand("인쇄", "Print", typeof(ApplicationCommands));
-        public static RoutedUICommand Copy { get; } = new RoutedUICommand("복사", "Copy", typeof(ApplicationCommands));
-        public static RoutedUICommand Cut { get; } = new RoutedUICommand("잘라내기", "Cut", typeof(ApplicationCommands));
-        public static RoutedUICommand Paste { get; } = new RoutedUICommand("붙여넣기", "Paste", typeof(ApplicationCommands));
-        public static RoutedUICommand Undo { get; } = new RoutedUICommand("실행 취소", "Undo", typeof(ApplicationCommands));
-        public static RoutedUICommand Redo { get; } = new RoutedUICommand("다시 실행", "Redo", typeof(ApplicationCommands));
-        public static RoutedUICommand Delete { get; } = new RoutedUICommand("삭제", "Delete", typeof(ApplicationCommands));
-        public static RoutedUICommand SelectAll { get; } = new RoutedUICommand("모두 선택", "SelectAll", typeof(ApplicationCommands));
-        public static RoutedUICommand Help { get; } = new RoutedUICommand("도움말", "Help", typeof(ApplicationCommands));
-        public static RoutedUICommand Find { get; } = new RoutedUICommand("찾기", "Find", typeof(ApplicationCommands));
-        public static RoutedUICommand Properties { get; } = new RoutedUICommand("속성", "Properties", typeof(ApplicationCommands));
-        public static RoutedUICommand Stop { get; } = new RoutedUICommand("중지", "Stop", typeof(ApplicationCommands));
-        public static RoutedUICommand NotACommand { get; } = new RoutedUICommand("", "NotACommand", typeof(ApplicationCommands));
+        private static RoutedUICommand C(string text, string name, params KeyGesture[] g) { var col = new InputGestureCollection(); col.AddRange(g); return new RoutedUICommand(text, name, typeof(ApplicationCommands), col); }
+        private static KeyGesture K(Key k, ModifierKeys m = ModifierKeys.None) => new KeyGesture(k, m);
+        public static RoutedUICommand New { get; } = C("새로 만들기", "New", K(Key.N, ModifierKeys.Control));
+        public static RoutedUICommand Open { get; } = C("열기", "Open", K(Key.O, ModifierKeys.Control));
+        public static RoutedUICommand Save { get; } = C("저장", "Save", K(Key.S, ModifierKeys.Control));
+        public static RoutedUICommand SaveAs { get; } = C("다른 이름으로 저장", "SaveAs");
+        public static RoutedUICommand Close { get; } = C("닫기", "Close");
+        public static RoutedUICommand Print { get; } = C("인쇄", "Print", K(Key.P, ModifierKeys.Control));
+        public static RoutedUICommand Copy { get; } = C("복사", "Copy", K(Key.C, ModifierKeys.Control));
+        public static RoutedUICommand Cut { get; } = C("잘라내기", "Cut", K(Key.X, ModifierKeys.Control));
+        public static RoutedUICommand Paste { get; } = C("붙여넣기", "Paste", K(Key.V, ModifierKeys.Control));
+        public static RoutedUICommand Undo { get; } = C("실행 취소", "Undo", K(Key.Z, ModifierKeys.Control));
+        public static RoutedUICommand Redo { get; } = C("다시 실행", "Redo", K(Key.Y, ModifierKeys.Control));
+        public static RoutedUICommand Delete { get; } = C("삭제", "Delete", K(Key.Delete));
+        public static RoutedUICommand SelectAll { get; } = C("모두 선택", "SelectAll", K(Key.A, ModifierKeys.Control));
+        public static RoutedUICommand Help { get; } = C("도움말", "Help", K(Key.F1));
+        public static RoutedUICommand Find { get; } = C("찾기", "Find", K(Key.F, ModifierKeys.Control));
+        public static RoutedUICommand Replace { get; } = C("바꾸기", "Replace", K(Key.H, ModifierKeys.Control));
+        public static RoutedUICommand Properties { get; } = C("속성", "Properties", K(Key.F4));
+        public static RoutedUICommand Stop { get; } = C("중지", "Stop", K(Key.Escape));
+        public static RoutedUICommand NotACommand { get; } = C("", "NotACommand");
+        /// <summary>글자 편집 명령: 입력칸 안에서는 브라우저 기본 동작(복사 · 붙여넣기 등)을 우선한다</summary>
+        internal static bool IsEditing(ICommand c) => ReferenceEquals(c, Copy) || ReferenceEquals(c, Cut) || ReferenceEquals(c, Paste) || ReferenceEquals(c, Undo) || ReferenceEquals(c, Redo) || ReferenceEquals(c, SelectAll) || ReferenceEquals(c, Delete);
+        /// <summary>"ApplicationCommands.Save" · "Save" 같은 이름 → 명령 (XAML Command="…" 문자열)</summary>
+        public static ICommand? FromName(string s)
+        {
+            s = s.Trim();
+            var dot = s.LastIndexOf('.');
+            var owner = dot > 0 ? s.Substring(0, dot) : "";
+            var name = dot > 0 ? s.Substring(dot + 1) : s;
+            foreach (var t in new[] { typeof(ApplicationCommands), typeof(NavigationCommands) })
+            {
+                if (owner.Length > 0 && owner != t.Name) continue;
+                var p = t.GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (p != null) return p.GetValue(null) as ICommand;
+            }
+            return null;
+        }
     }
     public static class NavigationCommands
     {

@@ -70,6 +70,8 @@ namespace WpfShim
             if (target == typeof(PropertyPath)) return new PropertyPath(t);
             if (target == typeof(System.Windows.Input.KeyGesture)) return System.Windows.Input.KeyGesture.Parse(t);
             if (target == typeof(System.Windows.Input.InputGesture)) return System.Windows.Input.KeyGesture.Parse(t);
+            if (typeof(System.Windows.Input.ICommand).IsAssignableFrom(target) && target.IsAssignableFrom(typeof(System.Windows.Input.RoutedUICommand)))
+                return System.Windows.Input.ApplicationCommands.FromName(t) ?? throw new FormatException("알 수 없는 명령 이름: " + t + " (ApplicationCommands.Save 처럼 쓰거나 {x:Static …} 사용)");
             // 정적 Parse(string) 이 있으면 사용
             var m = target.GetMethod("Parse", new[] { typeof(string) });
             if (m != null && m.IsStatic) return m.Invoke(null, new object[] { s });

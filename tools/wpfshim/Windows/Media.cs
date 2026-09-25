@@ -127,6 +127,7 @@ namespace System.Windows.Media
         public GradientStop(Color color, double offset) { Color = color; Offset = offset; }
     }
     public class GradientStopCollection : List<GradientStop> { }
+    [Markup.ContentProperty("GradientStops")]
     public abstract class GradientBrush : Brush
     {
         public GradientStopCollection GradientStops { get; set; } = new GradientStopCollection();
@@ -188,19 +189,6 @@ namespace System.Windows.Media
         public static SolidColorBrush SeaShell => B("SeaShell"); public static SolidColorBrush Sienna => B("Sienna"); public static SolidColorBrush Silver => B("Silver"); public static SolidColorBrush SkyBlue => B("SkyBlue"); public static SolidColorBrush SlateBlue => B("SlateBlue"); public static SolidColorBrush SlateGray => B("SlateGray"); public static SolidColorBrush Snow => B("Snow"); public static SolidColorBrush SpringGreen => B("SpringGreen");
         public static SolidColorBrush SteelBlue => B("SteelBlue"); public static SolidColorBrush Tan => B("Tan"); public static SolidColorBrush Teal => B("Teal"); public static SolidColorBrush Thistle => B("Thistle"); public static SolidColorBrush Tomato => B("Tomato"); public static SolidColorBrush Transparent => B("Transparent"); public static SolidColorBrush Turquoise => B("Turquoise"); public static SolidColorBrush Violet => B("Violet");
         public static SolidColorBrush Wheat => B("Wheat"); public static SolidColorBrush White => B("White"); public static SolidColorBrush WhiteSmoke => B("WhiteSmoke"); public static SolidColorBrush Yellow => B("Yellow"); public static SolidColorBrush YellowGreen => B("YellowGreen");
-    }
-
-    public static class SystemColors
-    {
-        public static SolidColorBrush ControlBrush => new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
-        public static SolidColorBrush WindowBrush => Brushes.White;
-        public static SolidColorBrush HighlightBrush => new SolidColorBrush(Color.FromRgb(0, 0x78, 0xD7));
-        public static SolidColorBrush ControlTextBrush => Brushes.Black;
-        public static SolidColorBrush GrayTextBrush => new SolidColorBrush(Color.FromRgb(0x6D, 0x6D, 0x6D));
-        public static SolidColorBrush ActiveCaptionBrush => new SolidColorBrush(Color.FromRgb(0x99, 0xB4, 0xD1));
-        public static Color ControlColor => Color.FromRgb(0xF0, 0xF0, 0xF0);
-        public static Color WindowColor => Colors.White;
-        public static Color HighlightColor => Color.FromRgb(0, 0x78, 0xD7);
     }
 
     public class FontFamily

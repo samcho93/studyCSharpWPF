@@ -243,11 +243,21 @@ namespace System.Windows
     }
 
     // ------------------------------------------------------------------ 이벤트
+    public enum RoutingStrategy { Tunnel, Bubble, Direct }
     public class RoutedEvent
     {
         public string Name { get; }
+        public Type? OwnerType { get; }
+        public RoutingStrategy RoutingStrategy { get; } = RoutingStrategy.Bubble;
         public RoutedEvent(string name) { Name = name; }
-        public override string ToString() => Name;
+        public RoutedEvent(string name, Type ownerType) { Name = name; OwnerType = ownerType; }
+        /// <summary>처리기 등록 키: 선언 형식 + 이름 (ButtonBase.Click 과 MenuItem.Click 을 구분)</summary>
+        internal string Key => (OwnerType?.Name ?? "") + "." + Name;
+        public override string ToString() => (OwnerType?.Name ?? "") + "." + Name;
+    }
+    public static class EventManager
+    {
+        public static RoutedEvent RegisterRoutedEvent(string name, RoutingStrategy strategy, Type handlerType, Type ownerType) => new RoutedEvent(name, ownerType);
     }
     public class RoutedEventArgs : EventArgs
     {
@@ -405,6 +415,26 @@ namespace System.Windows
         public static string GetText() => _text;
         public static bool ContainsText() => _text.Length > 0;
         public static void Clear() => _text = "";
+    }
+
+    /// <summary>시스템 색 (실제 WPF 처럼 System.Windows 네임스페이스)</summary>
+    public static class SystemColors
+    {
+        public static Media.SolidColorBrush ControlBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0xF0, 0xF0, 0xF0));
+        public static Media.SolidColorBrush WindowBrush => Media.Brushes.White;
+        public static Media.SolidColorBrush HighlightBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0, 0x78, 0xD7));
+        public static Media.SolidColorBrush HighlightTextBrush => Media.Brushes.White;
+        public static Media.SolidColorBrush ControlTextBrush => Media.Brushes.Black;
+        public static Media.SolidColorBrush WindowTextBrush => Media.Brushes.Black;
+        public static Media.SolidColorBrush GrayTextBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0x6D, 0x6D, 0x6D));
+        public static Media.SolidColorBrush ActiveCaptionBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0x99, 0xB4, 0xD1));
+        public static Media.SolidColorBrush ControlLightBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0xE3, 0xE3, 0xE3));
+        public static Media.SolidColorBrush ControlDarkBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0xA0, 0xA0, 0xA0));
+        public static Media.SolidColorBrush InfoBrush => new Media.SolidColorBrush(Media.Color.FromRgb(0xFF, 0xFF, 0xE1));
+        public static Media.Color ControlColor => Media.Color.FromRgb(0xF0, 0xF0, 0xF0);
+        public static Media.Color WindowColor => Media.Colors.White;
+        public static Media.Color HighlightColor => Media.Color.FromRgb(0, 0x78, 0xD7);
+        public static Media.Color ControlTextColor => Media.Colors.Black;
     }
 
     public static class SystemParameters

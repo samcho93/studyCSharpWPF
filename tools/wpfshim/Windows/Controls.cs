@@ -58,12 +58,26 @@ namespace System.Windows.Controls
         public event MouseButtonEventHandler? PreviewMouseDoubleClick;
         internal override void HandleDomEvent(string name, JsonElement a)
         {
-            if (name == "keydown" && InputBindings.Count > 0)
+            if (name == "keydown" && (InputBindings.Count > 0 || CommandBindings.Count > 0))
             {
                 var key = KeyMap.FromDom(S(a, "code"), S(a, "key"));
                 var mods = (B(a, "ctrl") ? ModifierKeys.Control : 0) | (B(a, "shift") ? ModifierKeys.Shift : 0) | (B(a, "alt") ? ModifierKeys.Alt : 0);
+                bool inText = B(a, "text");   // 입력칸 안: Ctrl+C/V/Z 등은 입력칸이 처리
+                // 1) KeyBinding / InputBinding
                 foreach (var ib in InputBindings)
-                    if (ib.Gesture is KeyGesture kg && kg.Matches(key, mods) && ib.Command != null && ib.Command.CanExecute(ib.CommandParameter)) { ib.Command.Execute(ib.CommandParameter); return; }
+                {
+                    if (!(ib.Gesture is KeyGesture kg) || !kg.Matches(key, mods) || ib.Command == null) continue;
+                    if (ib.Command is RoutedCommand r) { if (r.CanExecute(ib.CommandParameter, this)) r.Execute(ib.CommandParameter, this); }
+                    else if (ib.Command.CanExecute(ib.CommandParameter)) ib.Command.Execute(ib.CommandParameter);
+                    return;
+                }
+                // 2) CommandBinding 된 명령의 기본 단축키 (ApplicationCommands.Save = Ctrl+S …)
+                foreach (var cb in CommandBindings)
+                {
+                    if (!(cb.Command is RoutedCommand rc) || (inText && ApplicationCommands.IsEditing(rc))) continue;
+                    foreach (var g in rc.InputGestures)
+                        if (g is KeyGesture kg && kg.Matches(key, mods)) { if (cb.CheckCanExecute(this, null)) cb.Run(this, null); return; }
+                }
             }
             base.HandleDomEvent(name, a);
         }
@@ -83,7 +97,7 @@ namespace System.Windows.Controls
         public object? Content
         {
             get => _content;
-            set { _content = value; LocalSet.Add("Content"); Present(); }
+            set { _content = value; LocalSet.Add("Content"); Present(); RaiseLocalChanged("Content"); }
         }
         public DataTemplate? ContentTemplate { get => Get<DataTemplate?>("ContentTemplate"); set { Values["ContentTemplate"] = value; Present(); } }
         public string? ContentStringFormat { get; set; }
@@ -227,9 +241,15 @@ namespace System.Windows.Controls
         public bool IsUndoEnabled { get; set; } = true;
         public Brush? SelectionBrush { get; set; }
         public Brush? CaretBrush { get; set; }
+        public static readonly RoutedEvent TextChangedEvent = new RoutedEvent("TextChanged", typeof(TextBoxBase));
         public event TextChangedEventHandler? TextChanged;
         public event RoutedEventHandler? SelectionChanged;
-        protected void RaiseTextChanged() => TextChanged?.Invoke(this, new TextChangedEventArgs { Source = this });
+        protected void RaiseTextChanged()
+        {
+            var e = new TextChangedEventArgs { Source = this, OriginalSource = this, RoutedEvent = TextChangedEvent };
+            TextChanged?.Invoke(this, e);
+            UIElement.RaiseRouted(this, TextChangedEvent, e);
+        }
         public void SelectAll() => UiTree.Op("call", Id, "selectAll");
         public void Select(int start, int length) => UiTree.Op("call", Id, "select", start, length);
         public void ScrollToEnd() => UiTree.Op("call", Id, "scrollToEnd");
@@ -319,6 +339,7 @@ namespace System.Windows.Controls
         public IInputElement? CommandTarget { get; set; }
         public ClickMode ClickMode { get; set; }
         public bool IsPressed { get; internal set; }
+        public static readonly RoutedEvent ClickEvent = new RoutedEvent("Click", typeof(ButtonBase));
         public event RoutedEventHandler? Click;
         private void OnCanExecuteChanged(object? s, EventArgs e) => UpdateCanExecute();
         internal void UpdateCanExecute()
@@ -330,7 +351,9 @@ namespace System.Windows.Controls
         }
         internal virtual void OnClick()
         {
-            Click?.Invoke(this, new RoutedEventArgs { Source = this, OriginalSource = this });
+            var e = new RoutedEventArgs(ClickEvent, this);
+            Click?.Invoke(this, e);
+            UIElement.RaiseRouted(this, ClickEvent, e);   // 부모의 Button.Click="…" · AddHandler(ButtonBase.ClickEvent, …)
             if (_command != null)
             {
                 if (_command is RoutedCommand rc) { if (rc.CanExecute(CommandParameter, this)) rc.Execute(CommandParameter, this); }
@@ -366,13 +389,18 @@ namespace System.Windows.Controls
             set { var old = IsChecked; Set("IsChecked", value); if (old != value) RaiseCheckedEvents(value); }
         }
         public bool IsThreeState { get => Get("IsThreeState", false); set => Set("IsThreeState", value); }
+        public static readonly RoutedEvent CheckedEvent = new RoutedEvent("Checked", typeof(ToggleButton));
+        public static readonly RoutedEvent UncheckedEvent = new RoutedEvent("Unchecked", typeof(ToggleButton));
+        public static readonly RoutedEvent IndeterminateEvent = new RoutedEvent("Indeterminate", typeof(ToggleButton));
         public event RoutedEventHandler? Checked;
         public event RoutedEventHandler? Unchecked;
         public event RoutedEventHandler? Indeterminate;
         protected void RaiseCheckedEvents(bool? v)
         {
-            var e = new RoutedEventArgs { Source = this };
+            var re = v == true ? CheckedEvent : v == false ? UncheckedEvent : IndeterminateEvent;
+            var e = new RoutedEventArgs(re, this);
             if (v == true) Checked?.Invoke(this, e); else if (v == false) Unchecked?.Invoke(this, e); else Indeterminate?.Invoke(this, e);
+            UIElement.RaiseRouted(this, re, e);
         }
         internal override void HandleDomEvent(string name, JsonElement a)
         {
@@ -533,6 +561,7 @@ namespace System.Windows.Controls
                 LocalSet.Add("ItemsSource");
                 if (_itemsSource is INotifyCollectionChanged n) n.CollectionChanged += OnSourceChanged;
                 Regenerate();
+                RaiseLocalChanged("ItemsSource");
             }
         }
         public DataTemplate? ItemTemplate { get => Get<DataTemplate?>("ItemTemplate"); set { Values["ItemTemplate"] = value; Regenerate(); } }
@@ -565,18 +594,27 @@ namespace System.Windows.Controls
                     else
                     {
                         c = CreateContainer();
+                        // 템플릿 안의 StaticResource 가 창 · 목록의 Resources 를 찾을 수 있도록 부모부터 연결
+                        if (c is FrameworkElement pf) pf.SetParent(this);
                         if (c is ContentControl cc)
                         {
                             cc.ContentTemplate = ItemTemplate;
                             var content = item;
-                            if (DisplayMemberPath != null && item != null) content = BindingExpression.GetPathValue(item, DisplayMemberPath);
+                            if (DisplayMemberPath != null && item != null && cc is FrameworkElement dfe)
+                            {
+                                // 항목의 속성이 바뀌면 표시도 바뀌도록 바인딩으로 연결
+                                dfe.DataContext = item;
+                                BindingOperations.SetBinding(cc, ContentControl.ContentProperty, new Binding(DisplayMemberPath));
+                                goto made;
+                            }
                             else if (ItemStringFormat != null && item != null) content = string.Format(ItemStringFormat, item);
                             if (cc is FrameworkElement fe && !(content is UIElement)) fe.DataContext = item;
                             cc.Content = content;
                         }
+                        made:
                         if (ItemContainerStyle != null && c is FrameworkElement f) f.Style = ItemContainerStyle;
                     }
-                    if (c is FrameworkElement cf) cf.SetParent(this);
+                    if (c is FrameworkElement cf && cf.ParentElement != this) cf.SetParent(this);
                     Containers.Add(c);
                 }
                 var ids = new List<int>(); foreach (var c in Containers) ids.Add(c.Id);
@@ -634,20 +672,23 @@ namespace System.Windows.Controls
             if (oldIndex == index) return;
             foreach (var c in Containers) if (c is ListBoxItem li) li.SetSelectedInternal(false);
             if (index >= 0 && index < Containers.Count && Containers[index] is ListBoxItem sel) sel.SetSelectedInternal(true);
-            if (!notifyRenderer)
-            {
-                if (Bindings.TryGetValue("SelectedItem", out var b1)) b1.UpdateSource(SelectedItem);
-                if (Bindings.TryGetValue("SelectedIndex", out var b2)) b2.UpdateSource(index);
-                if (Bindings.TryGetValue("SelectedValue", out var b3)) b3.UpdateSource(SelectedValue);
-            }
-            SelectionChanged?.Invoke(this, new SelectionChangedEventArgs(oldItem == null ? Array.Empty<object>() : new[] { oldItem }, SelectedItem == null ? Array.Empty<object>() : new[] { SelectedItem }) { Source = this });
+            // 코드에서 바꾼 선택도 TwoWay 바인딩 원본에 반영 (실제 WPF 와 같다)
+            if (Bindings.TryGetValue("SelectedItem", out var b1)) b1.UpdateSource(SelectedItem);
+            if (Bindings.TryGetValue("SelectedIndex", out var b2)) b2.UpdateSource(index);
+            if (Bindings.TryGetValue("SelectedValue", out var b3)) b3.UpdateSource(SelectedValue);
+            RaiseLocalChanged("SelectedItem"); RaiseLocalChanged("SelectedIndex"); RaiseLocalChanged("SelectedValue");
+            var e = new SelectionChangedEventArgs(oldItem == null ? Array.Empty<object>() : new[] { oldItem }, SelectedItem == null ? Array.Empty<object>() : new[] { SelectedItem }) { Source = this, OriginalSource = this, RoutedEvent = SelectionChangedEvent };
+            SelectionChanged?.Invoke(this, e);
+            UIElement.RaiseRouted(this, SelectionChangedEvent, e);
         }
+        public static readonly RoutedEvent SelectionChangedEvent = new RoutedEvent("SelectionChanged", typeof(Selector));
         protected override void OnItemsRegenerated()
         {
             if (_selIndex >= ItemList.Count) { _selIndex = -1; UiTree.Prop(Id, "SelectedIndex", -1); }
             else if (_selIndex >= 0) { UiTree.Prop(Id, "SelectedIndex", _selIndex); if (Containers[_selIndex] is ListBoxItem li) li.SetSelectedInternal(true); }
-            // 컨테이너 자신이 IsSelected 를 가진 경우 (XAML 의 <ListBoxItem IsSelected="True">)
-            for (int i = 0; i < Containers.Count; i++) if (Containers[i] is ListBoxItem li && li.IsSelected && _selIndex < 0) { _selIndex = i; UiTree.Prop(Id, "SelectedIndex", i); }
+            // 컨테이너 자신이 IsSelected 를 가진 경우 (XAML 의 <ListBoxItem IsSelected="True">) — 실제 WPF 처럼 SelectionChanged 도 발생
+            if (_selIndex < 0)
+                for (int i = 0; i < Containers.Count; i++) if (Containers[i] is ListBoxItem li && li.IsSelected) { SetSelection(i, true); break; }
         }
         internal override void HandleDomEvent(string name, JsonElement a)
         {
@@ -778,7 +819,23 @@ namespace System.Windows.Controls
     public class MenuItem : HeaderedItemsControl
     {
         private ICommand? _command;
-        public ICommand? Command { get => _command; set { if (_command != null) _command.CanExecuteChanged -= OnCan; _command = value; if (_command != null) { _command.CanExecuteChanged += OnCan; OnCan(null, EventArgs.Empty); } } }
+        public static readonly RoutedEvent ClickEvent = new RoutedEvent("Click", typeof(MenuItem));
+        public ICommand? Command
+        {
+            get => _command;
+            set
+            {
+                if (_command != null) _command.CanExecuteChanged -= OnCan;
+                _command = value;
+                if (_command == null) return;
+                _command.CanExecuteChanged += OnCan;
+                OnCan(null, EventArgs.Empty);
+                // 실제 WPF 처럼 명령의 이름 · 단축키를 메뉴에 자동으로 표시
+                if (_command is RoutedUICommand ui && Header == null && ui.Text.Length > 0) Header = ui.Text;
+                if (_command is RoutedCommand rc && InputGestureText == null && rc.InputGestures.Count > 0 && rc.InputGestures[0] is KeyGesture kg) Values["$autoGesture"] = kg.DisplayString;
+                if (Values.TryGetValue("$autoGesture", out var g) && g is string gs && InputGestureText == null) UiTree.Prop(Id, "InputGestureText", gs);
+            }
+        }
         public object? CommandParameter { get; set; }
         public string? InputGestureText { get => Get<string?>("InputGestureText"); set => Set("InputGestureText", value); }
         public bool IsCheckable { get => Get("IsCheckable", false); set => Set("IsCheckable", value); }
@@ -798,7 +855,9 @@ namespace System.Windows.Controls
             if (name == "click")
             {
                 if (IsCheckable) { var v = !IsChecked; SetFromUi("IsChecked", v); (v ? Checked : Unchecked)?.Invoke(this, new RoutedEventArgs { Source = this }); }
-                Click?.Invoke(this, new RoutedEventArgs { Source = this });
+                var ce = new RoutedEventArgs(ClickEvent, this);
+                Click?.Invoke(this, ce);
+                UIElement.RaiseRouted(this, ClickEvent, ce);   // <Menu MenuItem.Click="…"> 처럼 부모에서 한꺼번에 처리
                 if (_command != null) { if (_command is RoutedCommand rc) { if (rc.CanExecute(CommandParameter, this)) rc.Execute(CommandParameter, this); } else if (_command.CanExecute(CommandParameter)) _command.Execute(CommandParameter); }
                 return;
             }

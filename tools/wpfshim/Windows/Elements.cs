@@ -43,6 +43,24 @@ namespace System.Windows
         public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.Register("IsEnabled", typeof(bool), typeof(UIElement));
         public static readonly DependencyProperty RenderTransformProperty = DependencyProperty.Register("RenderTransform", typeof(Transform), typeof(UIElement));
         public static readonly DependencyProperty RenderTransformOriginProperty = DependencyProperty.Register("RenderTransformOrigin", typeof(Point), typeof(UIElement));
+        // 라우트된 이벤트 식별자 (AddHandler(UIElement.MouseDownEvent, …) 용)
+        public static readonly RoutedEvent MouseDownEvent = new RoutedEvent("MouseDown", typeof(UIElement));
+        public static readonly RoutedEvent MouseUpEvent = new RoutedEvent("MouseUp", typeof(UIElement));
+        public static readonly RoutedEvent MouseLeftButtonDownEvent = new RoutedEvent("MouseLeftButtonDown", typeof(UIElement));
+        public static readonly RoutedEvent MouseLeftButtonUpEvent = new RoutedEvent("MouseLeftButtonUp", typeof(UIElement));
+        public static readonly RoutedEvent MouseRightButtonDownEvent = new RoutedEvent("MouseRightButtonDown", typeof(UIElement));
+        public static readonly RoutedEvent MouseMoveEvent = new RoutedEvent("MouseMove", typeof(UIElement));
+        public static readonly RoutedEvent MouseWheelEvent = new RoutedEvent("MouseWheel", typeof(UIElement));
+        public static readonly RoutedEvent MouseEnterEvent = new RoutedEvent("MouseEnter", typeof(UIElement));
+        public static readonly RoutedEvent MouseLeaveEvent = new RoutedEvent("MouseLeave", typeof(UIElement));
+        public static readonly RoutedEvent PreviewMouseDownEvent = new RoutedEvent("PreviewMouseDown", typeof(UIElement));
+        public static readonly RoutedEvent PreviewMouseLeftButtonDownEvent = new RoutedEvent("PreviewMouseLeftButtonDown", typeof(UIElement));
+        public static readonly RoutedEvent KeyDownEvent = new RoutedEvent("KeyDown", typeof(UIElement));
+        public static readonly RoutedEvent KeyUpEvent = new RoutedEvent("KeyUp", typeof(UIElement));
+        public static readonly RoutedEvent PreviewKeyDownEvent = new RoutedEvent("PreviewKeyDown", typeof(UIElement));
+        public static readonly RoutedEvent GotFocusEvent = new RoutedEvent("GotFocus", typeof(UIElement));
+        public static readonly RoutedEvent LostFocusEvent = new RoutedEvent("LostFocus", typeof(UIElement));
+        public static readonly RoutedEvent TextInputEvent = new RoutedEvent("TextInput", typeof(UIElement));
         protected object? GetObj(string name) => Values.TryGetValue(name, out var v) ? v : null;
 
         /// <summary>코드/XAML 에서 값을 설정 (지역 값)</summary>
@@ -69,7 +87,11 @@ namespace System.Windows
             Values[name] = value;
             if (notify) UiTree.Prop(Id, name, value);
             OnPropertyChanged(name, old, value);
+            RaiseLocalChanged(name);
         }
+        /// <summary>요소 속성이 바뀌었음을 ElementName 바인딩 등에 알린다</summary>
+        internal event Action<string>? LocalPropertyChanged;
+        internal void RaiseLocalChanged(string name) => LocalPropertyChanged?.Invoke(name);
         protected virtual void OnPropertyChanged(string name, object? oldValue, object? newValue) { }
 
         /// <summary>부착 속성 (Grid.Row 등)</summary>
@@ -130,13 +152,41 @@ namespace System.Windows
         public bool CaptureMouse() => true;
         public void ReleaseMouseCapture() { }
         public void RaiseEvent(RoutedEventArgs e) { }
+        // ---------------------------------------------------------------- 라우트된 이벤트 (버블링)
+        internal List<(string key, Delegate handler, bool handledToo)>? RoutedHandlers;
         public void AddHandler(RoutedEvent ev, Delegate handler) { AddHandler(ev, handler, false); }
+        /// <summary>이 요소가 그 이벤트를 직접 가지고 있으면 그 이벤트에, 아니면 자손에서 올라오는(버블링) 이벤트 처리기로 등록한다</summary>
         public void AddHandler(RoutedEvent ev, Delegate handler, bool handledEventsToo)
         {
-            var evi = GetType().GetEvent(ev.Name.Replace("Event", ""));
-            evi?.AddEventHandler(this, handler);
+            var evi = GetType().GetEvent(ev.Name);
+            if (evi != null && (ev.OwnerType == null || ev.OwnerType.IsAssignableFrom(GetType())) && evi.EventHandlerType == handler.GetType())
+            { evi.AddEventHandler(this, handler); return; }
+            (RoutedHandlers ??= new List<(string, Delegate, bool)>()).Add((ev.Key, handler, handledEventsToo));
         }
-        public void RemoveHandler(RoutedEvent ev, Delegate handler) { }
+        public void RemoveHandler(RoutedEvent ev, Delegate handler)
+        {
+            var evi = GetType().GetEvent(ev.Name);
+            if (evi != null && evi.EventHandlerType == handler.GetType()) evi.RemoveEventHandler(this, handler);
+            RoutedHandlers?.RemoveAll(x => x.key == ev.Key && x.handler == handler);
+        }
+        /// <summary>source 에서 발생한 이벤트를 부모 쪽으로 올려 보낸다 (각 조상의 AddHandler / XAML Button.Click="…" 처리기 호출)</summary>
+        internal static void RaiseRouted(UIElement source, RoutedEvent ev, RoutedEventArgs e)
+        {
+            if (e.Source == null) e.Source = source;
+            if (e.OriginalSource == null) e.OriginalSource = source;
+            e.RoutedEvent ??= ev;
+            for (var p = (source as FrameworkElement)?.ParentElement; p != null; p = p.ParentElement)
+            {
+                if (p.RoutedHandlers == null) continue;
+                foreach (var (key, h, handledToo) in p.RoutedHandlers.ToArray())
+                {
+                    if (key != ev.Key) continue;
+                    if (e.Handled && !handledToo) continue;
+                    try { h.DynamicInvoke(p, e); }
+                    catch (TargetInvocationException tie) when (tie.InnerException != null) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(tie.InnerException).Throw(); }
+                }
+            }
+        }
         public Point TranslatePoint(Point p, UIElement relativeTo) => p;
         public Point PointToScreen(Point p) => p;
         public Point PointFromScreen(Point p) => p;
@@ -277,19 +327,29 @@ namespace System.Windows
         public object? DataContext
         {
             get => _dataContextSet ? _dataContext : ParentElement?.DataContext;
-            set { _dataContext = value; _dataContextSet = true; LocalSet.Add("DataContext"); OnDataContextChanged(); }
+            set
+            {
+                if (_dataContextSet && ReferenceEquals(_dataContext, value)) return;
+                _dataContext = value; _dataContextSet = true; LocalSet.Add("DataContext"); OnDataContextChanged();
+            }
         }
         internal bool HasLocalDataContext => _dataContextSet;
         public event DependencyPropertyChangedEventHandler? DataContextChanged;
         internal virtual void OnDataContextChanged()
         {
-            foreach (var be in Bindings.Values) be.OnDataContextChanged();
+            foreach (var kv in new List<KeyValuePair<string, Data.BindingExpression>>(Bindings))
+                if (kv.Key != "DataContext") kv.Value.OnDataContextChanged();
             DataContextChanged?.Invoke(this, new DependencyPropertyChangedEventArgs(DataContextProperty, null, DataContext));
+            RaiseLocalChanged("DataContext");
             PropagateDataContext();
         }
         internal virtual void PropagateDataContext()
         {
-            foreach (var c in LogicalChildren()) if (!c.HasLocalDataContext) c.OnDataContextChanged();
+            foreach (var c in LogicalChildren())
+            {
+                if (!c.HasLocalDataContext) c.OnDataContextChanged();
+                else if (c.Bindings.TryGetValue("DataContext", out var dcb)) dcb.OnDataContextChanged();   // DataContext="{Binding X}"
+            }
         }
         internal virtual IEnumerable<FrameworkElement> LogicalChildren() { yield break; }
 
@@ -300,6 +360,7 @@ namespace System.Windows
             {
                 ApplyImplicitStyle();
                 if (!_dataContextSet) OnDataContextChanged();
+                else if (Bindings.TryGetValue("DataContext", out var dcb)) dcb.OnDataContextChanged();
                 if (p.IsLoaded) RaiseLoaded();
             }
         }
@@ -323,13 +384,19 @@ namespace System.Windows
         {
             if (IsLoaded) return;
             IsLoaded = true;
+            // 창에 연결된 뒤에야 조상(Window.Resources 등)의 암시적 스타일을 찾을 수 있다
+            if (!Values.ContainsKey("Style")) ApplyImplicitStyle();
             Loaded?.Invoke(this, new RoutedEventArgs { Source = this });
             foreach (var t in Triggers)
                 if (t is EventTrigger et && (et.RoutedEvent.EndsWith("Loaded") || et.RoutedEvent.Length == 0))
                     foreach (var a in et.Actions) if (a is Media.Animation.BeginStoryboard bs) bs.Storyboard?.Begin(this);
             foreach (var c in LogicalChildren()) c.RaiseLoaded();
         }
-        internal void RaiseSizeChanged() => SizeChanged?.Invoke(this, new SizeChangedEventArgs { Source = this, NewSize = new Size(ActualWidthCore, ActualHeightCore) });
+        internal void RaiseSizeChanged()
+        {
+            SizeChanged?.Invoke(this, new SizeChangedEventArgs { Source = this, NewSize = new Size(ActualWidthCore, ActualHeightCore) });
+            RaiseLocalChanged("ActualWidth"); RaiseLocalChanged("ActualHeight");
+        }
         public void BringIntoView() { UiTree.Op("call", Id, "scrollIntoView"); }
 
         // ---------------------------------------------------------------- 이름 · 리소스

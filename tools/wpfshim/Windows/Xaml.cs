@@ -195,6 +195,9 @@ namespace System.Windows.Markup
                     var type = XamlTypes.Resolve(ns, name) ?? throw Err(el, $"알 수 없는 요소: <{name}>  (지원하지 않는 컨트롤이거나 xmlns 접두사가 잘못되었습니다)");
                     if (type == typeof(string)) return Collapse(el.Value, el);
                     if (type.IsPrimitive || type == typeof(decimal)) return Conv.FromString(type, el.Value.Trim());
+                    // 값 형식 · Parse 가능한 형식을 글자 내용으로 쓴 경우: <Thickness x:Key="m">10,5</Thickness>, <Color>#FF0000</Color>
+                    if (!el.Elements().Any() && !string.IsNullOrWhiteSpace(el.Value) && (type.IsValueType || type.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null) != null))
+                        return Conv.FromString(type, el.Value.Trim());
                     // 템플릿은 본문을 그대로 보관한다
                     if (typeof(DataTemplate).IsAssignableFrom(type))
                     {
@@ -241,6 +244,44 @@ namespace System.Windows.Markup
                     }
                     // 2) 자식 노드
                     var contentProp = ContentProperty(obj.GetType());
+                    // 인라인 내용(TextBlock · Span · Bold · Paragraph): 글자와 요소를 적힌 순서대로 Run/Inline 으로 넣는다
+                    bool inlineHost = obj is Documents.Span || obj is Documents.Paragraph
+                        || (obj is TextBlock && el.Elements().Any(e => !e.Name.LocalName.Contains('.') && e.Name.NamespaceName != XamlTypes.NsBlend && e.Name.NamespaceName != XamlTypes.NsMc));
+                    if (inlineHost)
+                    {
+                        var items = new List<object>();
+                        foreach (var node in el.Nodes())
+                        {
+                            if (node is XText tx) items.Add(tx.Value);
+                            else if (node is XElement c)
+                            {
+                                if (c.Name.NamespaceName == XamlTypes.NsBlend || c.Name.NamespaceName == XamlTypes.NsMc) continue;
+                                if (c.Name.LocalName.Contains('.')) { ApplyPropertyElement(obj, c); continue; }
+                                items.Add(c);
+                            }
+                        }
+                        bool preserve = el.Attribute(XNamespace.Xml + "space")?.Value == "preserve";
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            if (items[i] is string s)
+                            {
+                                if (!preserve)
+                                {
+                                    s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ");
+                                    if (i == 0) s = s.TrimStart();
+                                    if (i == items.Count - 1) s = s.TrimEnd();
+                                }
+                                if (s.Length > 0) AddInline(obj, new Documents.Run(s));
+                            }
+                            else if (items[i] is XElement c)
+                            {
+                                var child = Build(c, null, obj as FrameworkElement);
+                                if (child is Documents.Inline inl) AddInline(obj, inl);
+                                else if (child != null) AddContent(obj, contentProp, child, c);
+                            }
+                        }
+                        return obj;
+                    }
                     var textBuf = new StringBuilder();
                     bool hadElementContent = false;
                     foreach (var node in el.Nodes())
@@ -272,6 +313,13 @@ namespace System.Windows.Markup
                 return obj;
             }
 
+            private static void AddInline(object host, Documents.Inline inl)
+            {
+                if (host is TextBlock tb) tb.Inlines.Add(inl);
+                else if (host is Documents.Span sp) sp.Inlines.Add(inl);
+                else if (host is Documents.Paragraph pg) pg.Inlines.Add(inl);
+            }
+
             private static string Collapse(string s, XElement el)
             {
                 if (string.IsNullOrWhiteSpace(s)) return "";
@@ -289,7 +337,12 @@ namespace System.Windows.Markup
             {
                 if (obj is FrameworkElement fe) fe.Name = name;
                 else { var pi = obj.GetType().GetProperty("Name"); if (pi != null && pi.CanWrite && pi.PropertyType == typeof(string)) pi.SetValue(obj, name); }
-                if (Root is FrameworkElement r && !(obj is FrameworkElement)) { /* 비요소 객체는 FindName 으로 찾지 못한다 */ }
+                // 실제 WPF 처럼 x:Name 필드를 요소를 만드는 즉시 채운다 — 읽는 도중 발생하는 이벤트(SelectionChanged 등)의 처리기에서 앞에 선언된 요소를 쓸 수 있다
+                if (Root != null && !ReferenceEquals(obj, Root))
+                {
+                    var f = Root.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null && f.FieldType.IsInstanceOfType(obj)) f.SetValue(Root, obj);
+                }
             }
 
             private static string? ContentProperty(Type t)
@@ -429,6 +482,9 @@ namespace System.Windows.Markup
                     var dot = name.IndexOf('.');
                     var ownerType = XamlTypes.Resolve(el.GetDefaultNamespace().NamespaceName, name.Substring(0, dot)) ?? XamlTypes.Resolve(XamlTypes.NsPresentation, name.Substring(0, dot));
                     if (ownerType == null) { Warn(el, $"알 수 없는 부착 속성 {name}"); return; }
+                    // 부착 이벤트: <StackPanel Button.Click="…"> — 자식에서 올라오는(버블링) 이벤트를 부모가 한꺼번에 처리
+                    var aev = ownerType.GetEvent(name.Substring(dot + 1), BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                    if (aev != null && target is UIElement tue) { HookAttachedEvent(tue, ownerType, aev, value, el); return; }
                     object? v = value.StartsWith("{") && !value.StartsWith("{}") ? Evaluate(value, target, el, typeof(object)) : value;
                     SetAttached(target, ownerType, name.Substring(dot + 1), v, el);
                     return;
@@ -506,6 +562,18 @@ namespace System.Windows.Markup
                 }
                 evi.AddEventHandler(target, del);
             }
+            private void HookAttachedEvent(UIElement target, Type ownerType, EventInfo evi, string handlerName, XElement el)
+            {
+                var owner = Owner ?? Root;
+                if (owner == null) { Warn(el, $"{ownerType.Name}.{evi.Name}=\"{handlerName}\": 이벤트 처리기를 연결할 코드 비하인드 객체가 없습니다"); return; }
+                var mi = FindMethod(owner.GetType(), handlerName) ?? throw Err(el, $"{ownerType.Name}.{evi.Name}=\"{handlerName}\": {owner.GetType().Name} 클래스에 {handlerName} 메서드가 없습니다.");
+                var del = Delegate.CreateDelegate(evi.EventHandlerType!, mi.IsStatic ? null : owner, mi, false)
+                          ?? throw Err(el, $"{ownerType.Name}.{evi.Name}=\"{handlerName}\": 메서드 시그니처가 맞지 않습니다.");
+                var f = ownerType.GetField(evi.Name + "Event", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+                var re = f?.GetValue(null) as RoutedEvent ?? new RoutedEvent(evi.Name, evi.DeclaringType!);
+                target.AddHandler(re, del);
+            }
+
             private static MethodInfo? FindMethod(Type t, string name)
             {
                 for (var x = t; x != null; x = x.BaseType)
@@ -590,7 +658,10 @@ namespace System.Windows.Markup
                     case "StaticResource": case "DynamicResource":
                     {
                         var key = pos.Count > 0 ? pos[0] : named.FirstOrDefault(k => k.Key == "ResourceKey").Value ?? "";
-                        var r = FindResource(key, target);
+                        // {StaticResource {x:Type Button}} : 형식 키 (암시적 스타일을 BasedOn 으로 쓸 때)
+                        object rkey = key.StartsWith("{") ? (Evaluate(key, target, el, typeof(object)) ?? key) : key;
+                        var r = FindResource(rkey, target);
+                        if (r == null && rkey is Type) return null;   // 기본 스타일을 가리키는 BasedOn: 실제 WPF 에서도 비어 있을 수 있다
                         if (r == null) throw Err(el, $"리소스 '{key}' 를 찾을 수 없습니다 (Resources 에 x:Key=\"{key}\" 로 정의했는지, 정의가 사용보다 앞에 있는지 확인)");
                         return r;
                     }
@@ -646,6 +717,7 @@ namespace System.Windows.Markup
                 }
                 if (target is FrameworkElement t) { var r = t.TryFindResource(key); if (r != null) return r; }
                 if (ScopeParent != null) { var r = ScopeParent.TryFindResource(key); if (r != null) return r; }
+                if (Owner is FrameworkElement ow) { var r = ow.TryFindResource(key); if (r != null) return r; }   // 템플릿: 정의한 창의 Resources
                 if (Root is FrameworkElement rf) { var r = rf.TryFindResource(key); if (r != null) return r; }
                 if (Application.Current != null && Application.Current.Resources.TryGetValue(key, out var av)) return av;
                 return null;

@@ -107,7 +107,12 @@
     frame.querySelector('[data-w="max"]').onclick = (e) => { e.stopPropagation(); maximize(rec.id); };
     frame.querySelector('.wpf-title').ondblclick = () => maximize(rec.id);
     frame.addEventListener('mousedown', () => activate(rec.id));
-    frame.addEventListener('keydown', (e) => { keyEvent(rec.id, e, 'keydown'); send(0, 'keystate', keyArgs(e, 'keydown')); if (e.key === 'Tab') return; });
+    frame.addEventListener('keydown', (e) => {
+      // WPF 창 안에서는 브라우저 단축키(Ctrl+S 페이지 저장, Ctrl+N 새 창 …) 대신 프로그램의 명령이 받는다
+      if ((e.ctrlKey || e.metaKey) && /^[snopfhrwdgjkl]$/i.test(e.key)) e.preventDefault();
+      if (e.key === 'F1' || e.key === 'F3' || e.key === 'F5' || e.key === 'F7') e.preventDefault();
+      keyEvent(rec.id, e, 'keydown'); send(0, 'keystate', keyArgs(e, 'keydown'));
+    });
     frame.addEventListener('keyup', (e) => { keyEvent(rec.id, e, 'keyup'); send(0, 'keystate', keyArgs(e, 'keyup')); });
     frame.tabIndex = -1;
     dragTitle(frame, w);
@@ -372,7 +377,12 @@
       else n.style.alignSelf = explicitW && H === 'Stretch' ? 'center' : (map[H] || 'stretch');
       n.style.flex = '0 0 auto';
     } else if (pt === 'WrapPanel' || pt === 'UniformGrid') {
-      if (pt === 'WrapPanel') { if (parent.props.ItemWidth != null && !Number.isNaN(+parent.props.ItemWidth)) n.style.width = px(parent.props.ItemWidth); if (parent.props.ItemHeight != null && !Number.isNaN(+parent.props.ItemHeight)) n.style.height = px(parent.props.ItemHeight); }
+      if (pt === 'WrapPanel') {
+        // WPF: ItemWidth/ItemHeight 는 여백(Margin)을 포함한 칸 크기
+        const mt = thick(p.Margin) || [0, 0, 0, 0];
+        if (parent.props.ItemWidth != null && !Number.isNaN(+parent.props.ItemWidth)) n.style.width = px(Math.max(0, +parent.props.ItemWidth - mt[0] - mt[2]));
+        if (parent.props.ItemHeight != null && !Number.isNaN(+parent.props.ItemHeight)) n.style.height = px(Math.max(0, +parent.props.ItemHeight - mt[1] - mt[3]));
+      }
       else { n.style.justifySelf = map[H] || 'stretch'; n.style.alignSelf = map[V] || 'stretch'; n.style.minWidth = '0'; n.style.minHeight = '0'; }
     } else if (pt === 'Canvas') {
       n.style.position = 'absolute';
@@ -380,6 +390,8 @@
       if (r != null && (l == null)) n.style.right = px(r); else n.style.left = px(num(l, 0));
       if (b != null && (t == null)) n.style.bottom = px(b); else n.style.top = px(num(t, 0));
       n.style.zIndex = String(num(p['Panel.ZIndex'], 0));
+    } else if (pt === 'Viewbox') {
+      n.style.flex = '0 0 auto'; n.style.alignSelf = 'center'; n.style.margin = thickCss(p.Margin) || '0';
     } else if (pt === 'DockPanel') {
       if (dockHint === 'Top' || dockHint === 'Bottom') n.style.alignSelf = explicitW && H === 'Stretch' ? 'center' : (map[H] || 'stretch');
       else if (dockHint === 'Left' || dockHint === 'Right') n.style.alignSelf = explicitH && V === 'Stretch' ? 'center' : (map[V] || 'stretch');
@@ -523,7 +535,36 @@
       case 'Separator': break;
       case 'Window': break;
     }
-    if (el.parent) { const pe = els.get(el.parent); if (pe && pe.dom && n.parentNode) layoutChild(el, pe, pe.type === 'DockPanel' ? (p['DockPanel.Dock'] || 'Left') : undefined); }
+    if (el.parent) {
+      const pe = els.get(el.parent);
+      if (pe && pe.dom && n.parentNode) layoutChild(el, pe, pe.type === 'DockPanel' ? (p['DockPanel.Dock'] || 'Left') : undefined);
+      if (pe && pe.type === 'Viewbox') fitViewbox(pe);
+    }
+    if (t === 'Viewbox') fitViewbox(el);
+  }
+
+  /** Viewbox: 자식을 원래 크기로 둔 채 영역에 맞게 확대 · 축소한다 (CSS transform) */
+  function fitViewbox(el) {
+    const n = el.dom;
+    if (!n) return;
+    n.style.display = el.props.Visibility === 'Collapsed' ? 'none' : 'flex';
+    n.style.alignItems = 'center'; n.style.justifyContent = 'center'; n.style.overflow = 'hidden';
+    const c = el.children.length ? els.get(el.children[0]) : null;
+    if (!c || !c.dom) return;
+    const cn = c.dom;
+    cn.style.transform = 'none';
+    requestAnimationFrame(() => {
+      const cw = n.clientWidth, ch = n.clientHeight, w = cn.offsetWidth, h = cn.offsetHeight;
+      if (!w || !h || !cw || !ch) return;
+      const st = el.props.Stretch || 'Uniform';
+      let sx = cw / w, sy = ch / h;
+      if (st === 'Uniform') sx = sy = Math.min(sx, sy);
+      else if (st === 'UniformToFill') sx = sy = Math.max(sx, sy);
+      else if (st === 'None') sx = sy = 1;
+      cn.style.transformOrigin = 'center center';
+      cn.style.transform = `scale(${sx}, ${sy})`;
+    });
+    if (!el.vbRO && typeof ResizeObserver !== 'undefined') { el.vbRO = new ResizeObserver(() => fitViewbox(el)); el.vbRO.observe(n); }
   }
   function imgUrl(src) {
     src = String(src || '').replace(/^pack:\/\/application:,,,/, '').replace(/^siteoforigin:,,,/, '');
@@ -647,10 +688,11 @@
     const cr = w && w.frame ? w.frame.querySelector('.wpf-client').getBoundingClientRect() : r;
     const anc = {};
     for (let p = el.parent; p != null; p = (els.get(p) || {}).parent) { const pe = els.get(p); if (!pe || !pe.dom) break; const pr = pe.dom.getBoundingClientRect(); anc[p] = [pr.left - cr.left, pr.top - cr.top]; }
-    return Object.assign({ x: e.clientX - r.left, y: e.clientY - r.top, wx: e.clientX - cr.left, wy: e.clientY - cr.top, button: e.button, buttons: e.buttons, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, clicks: e.detail || 1, delta: e.deltaY != null ? -Math.sign(e.deltaY) * 120 : 0, anc }, extra || {});
+    const srcEl = e.target && e.target.closest ? e.target.closest('.wpf-el') : null;
+    return Object.assign({ x: e.clientX - r.left, y: e.clientY - r.top, wx: e.clientX - cr.left, wy: e.clientY - cr.top, button: e.button, buttons: e.buttons, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, clicks: e.detail || 1, delta: e.deltaY != null ? -Math.sign(e.deltaY) * 120 : 0, anc, src: srcEl ? +srcEl.dataset.id : el.id }, extra || {});
   }
   function findWindow(el) { for (let e = el; e; e = els.get(e.parent)) { if (windows.has(e.id)) return windows.get(e.id); if (e.parent == null) break; } return null; }
-  function keyArgs(e, name) { return { name, key: e.key, code: e.code, repeat: e.repeat, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }; }
+  function keyArgs(e, name) { const t = e.target; return { name, key: e.key, code: e.code, repeat: e.repeat, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, text: !!(t && t.matches && t.matches('input, textarea, select')) }; }
   function keyEvent(id, e, name) { if (e.target.closest('.wpf-modal')) return; send(id, name, keyArgs(e, name)); }
 
   function bindEvents(el) {
