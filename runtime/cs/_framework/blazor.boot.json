@@ -1,9 +1,9 @@
 {
   "mainAssemblyName": "CsRunner",
   "resources": {
-    "hash": "sha256-zqpZcabn1AaKnQI5beJThHAmG8toAhZCfdeTibHrvlE=",
+    "hash": "sha256-/zW83bLPVh/CTMNZlX4JpdkWGjCut4D+G9CNy4T9IZI=",
     "fingerprinting": {
-      "CsRunner.co9777okrm.dll": "CsRunner.dll",
+      "CsRunner.t87k2i248p.dll": "CsRunner.dll",
       "Microsoft.AspNetCore.Authorization.9cn1eufshj.dll": "Microsoft.AspNetCore.Authorization.dll",
       "Microsoft.AspNetCore.Components.01xi8fbi69.dll": "Microsoft.AspNetCore.Components.dll",
       "Microsoft.AspNetCore.Components.Forms.vnx3zz3bws.dll": "Microsoft.AspNetCore.Components.Forms.dll",
@@ -197,7 +197,7 @@
       "System.Xml.XPath.pvx3z9sbpf.dll": "System.Xml.XPath.dll",
       "System.Xml.XPath.XDocument.q2g7ur5m4a.dll": "System.Xml.XPath.XDocument.dll",
       "WindowsBase.z21zgignko.dll": "WindowsBase.dll",
-      "WpfShim.rapbfrjxtr.dll": "WpfShim.dll",
+      "WpfShim.02gl05lj3c.dll": "WpfShim.dll",
       "Microsoft.CodeAnalysis.CSharp.resources.a4vgos4ois.dll": "Microsoft.CodeAnalysis.CSharp.resources.dll",
       "Microsoft.CodeAnalysis.resources.uvr647n3jp.dll": "Microsoft.CodeAnalysis.resources.dll",
       "Microsoft.CodeAnalysis.CSharp.resources.xjo7xbqnu2.dll": "Microsoft.CodeAnalysis.CSharp.resources.dll",
@@ -251,7 +251,7 @@
       "System.Runtime.InteropServices.JavaScript.iq1tfh4uvx.dll": "sha256-9j5bDrwXXXGw5t/dbxt5F2ICzJ/8twVPD2wpeyio5xM="
     },
     "assembly": {
-      "CsRunner.co9777okrm.dll": "sha256-RHCTh4H5w86nUcpO2WJvN/6QdE5l7d77mcMgxysgunw=",
+      "CsRunner.t87k2i248p.dll": "sha256-rUvUFBDQW8deBA8oYVFBLO7LBqFzGuC2wCdc3Fq6RdM=",
       "Microsoft.AspNetCore.Authorization.9cn1eufshj.dll": "sha256-l92qVxFCcpe/zSB9wzzWV6kI/aalIyowK9SmtWAuDTg=",
       "Microsoft.AspNetCore.Components.01xi8fbi69.dll": "sha256-TLT1PdGw21WyxB3haPVSonZ23yLLwftn6lDTkJxwGZU=",
       "Microsoft.AspNetCore.Components.Forms.vnx3zz3bws.dll": "sha256-Kyyio6fqfK9iyziG6CUWAPLW63T5Cz44oLTGQmz29xA=",
@@ -443,7 +443,7 @@
       "System.Xml.XPath.pvx3z9sbpf.dll": "sha256-u+qEmlYAqHqNxQ8S6YugO0Au84vBGCGo46aKdKTLO50=",
       "System.Xml.XPath.XDocument.q2g7ur5m4a.dll": "sha256-IkfWAvPn1U1vFmhI5lasOWWsHF5yYgIQM6sDo1H2y44=",
       "WindowsBase.z21zgignko.dll": "sha256-xbfA073TVwftQSSd7OjSniMuycyztRv4XUQd99eVK6M=",
-      "WpfShim.rapbfrjxtr.dll": "sha256-LYC6+VUZYeX3ZlIi6eUxNNiOnnJR1RHu8pSy1UR+0FU="
+      "WpfShim.02gl05lj3c.dll": "sha256-iIgyDOjj67sMaOAICAJMXBl480CgBLnbKI+Xj+H4cQ8="
     },
     "satelliteResources": {
       "cs": {

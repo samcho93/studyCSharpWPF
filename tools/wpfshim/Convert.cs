@@ -100,6 +100,7 @@ namespace WpfShim
                 case FontFamily ff: return ff.Source;
                 case Point p: return p.ToString();
                 case PointCollection pc: return pc.ToString();
+                case DoubleCollection dc: return dc.ToString();
                 case Geometry ge: return ge.Data;
                 case Transform tr: return tr.ToCss();
                 case ImageSource im: return im.UriString;
@@ -109,6 +110,19 @@ namespace WpfShim
                 case System.Windows.Input.Cursor cu: return cu.Css;
                 case TimeSpan ts: return ts.TotalMilliseconds;
                 case DateTime dt: return dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                // 렌더러 전용 구조 데이터($events · $grid · $hover · $inlines): JSON 으로 그대로 보낸다
+                case System.Collections.IDictionary dict:
+                {
+                    var d = new Dictionary<string, object?>();
+                    foreach (System.Collections.DictionaryEntry kv in dict) d[kv.Key.ToString()!] = ToWire(kv.Value);
+                    return d;
+                }
+                case System.Collections.IEnumerable seq when !(v is string):
+                {
+                    var l = new List<object?>();
+                    foreach (var x in seq) l.Add(ToWire(x));
+                    return l;
+                }
                 default: return v.ToString();
             }
         }
