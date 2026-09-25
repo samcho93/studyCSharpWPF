@@ -33,12 +33,14 @@ namespace System.Windows.Shapes
     }
     public class Polygon : Shape
     {
-        public PointCollection Points { get => Get("Points", new PointCollection()); set => Set("Points", value); }
+        public static readonly DependencyProperty PointsProperty = DependencyProperty.Register("Points", typeof(PointCollection), typeof(Polygon));
+        public PointCollection Points { get { var p = Get<PointCollection?>("Points"); if (p == null) { p = new PointCollection(); Set("Points", p); } return p; } set => Set("Points", value); }
         public FillRule FillRule { get => Get("FillRule", FillRule.EvenOdd); set => Set("FillRule", value); }
     }
     public class Polyline : Shape
     {
-        public PointCollection Points { get => Get("Points", new PointCollection()); set => Set("Points", value); }
+        public static readonly DependencyProperty PointsProperty = DependencyProperty.Register("Points", typeof(PointCollection), typeof(Polyline));
+        public PointCollection Points { get { var p = Get<PointCollection?>("Points"); if (p == null) { p = new PointCollection(); Set("Points", p); } return p; } set => Set("Points", value); }
         public FillRule FillRule { get => Get("FillRule", FillRule.EvenOdd); set => Set("FillRule", value); }
     }
     public class Path : Shape

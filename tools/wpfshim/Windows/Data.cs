@@ -124,7 +124,12 @@ namespace System.Windows.Data
             {
                 var rs = ParentBinding.RelativeSource;
                 if (rs.Mode == RelativeSourceMode.Self) _source = Target;
-                else if (rs.Mode == RelativeSourceMode.FindAncestor) { FrameworkElement? e = Target.ParentElement; int lv = rs.AncestorLevel; while (e != null) { if (rs.AncestorType == null || rs.AncestorType.IsInstanceOfType(e)) { if (--lv <= 0) break; } e = e.ParentElement; } _source = e; }
+                else if (rs.Mode == RelativeSourceMode.FindAncestor)
+                {
+                    FrameworkElement? e = Target.ParentElement; int lv = rs.AncestorLevel; while (e != null) { if (rs.AncestorType == null || rs.AncestorType.IsInstanceOfType(e)) { if (--lv <= 0) break; } e = e.ParentElement; } _source = e;
+                    // 템플릿 안: 아직 목록에 붙기 전이면 창이 뜰 때 · 부모가 생길 때 다시 찾는다
+                    if (_source == null && !_waitLoaded) { _waitLoaded = true; Target.Loaded += (s, ev) => Refresh(); }
+                }
                 else _source = Target.DataContext;
             }
             // DataContext 자체를 바인딩하면 원본은 부모의 DataContext (자기 자신이 아니다)
@@ -361,6 +366,12 @@ namespace System.Windows.Data
             return _views.GetValue(source, s => new ListCollectionView(s as IEnumerable ?? Array.Empty<object>()));
         }
     }
+}
+
+// 실제 WPF 와 같이 ICollectionView · SortDescription 은 System.ComponentModel 네임스페이스
+namespace System.ComponentModel
+{
+    using System.Collections;
     public interface ICollectionView : IEnumerable
     {
         Predicate<object>? Filter { get; set; }
@@ -384,6 +395,14 @@ namespace System.Windows.Data
         protected override void SetItem(int index, SortDescription item) { base.SetItem(index, item); Changed?.Invoke(); }
         protected override void ClearItems() { base.ClearItems(); Changed?.Invoke(); }
     }
+}
+
+namespace System.Windows.Data
+{
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Collections.Specialized;
+    using System.ComponentModel;
     public class ListCollectionView : ICollectionView, INotifyCollectionChanged
     {
         private readonly IEnumerable _src;
@@ -405,10 +424,21 @@ namespace System.Windows.Data
         {
             var list = new List<object>();
             foreach (var o in _src) if (Filter == null || Filter(o)) list.Add(o);
-            foreach (var sd in SortDescriptions)
+            if (SortDescriptions.Count > 0)
             {
-                var d = sd;
-                list.Sort((a, b) => { var va = BindingExpression.GetPathValue(a, d.PropertyName); var vb = BindingExpression.GetPathValue(b, d.PropertyName); var c = Comparer.DefaultInvariant.Compare(va, vb); return d.Direction == ListSortDirection.Descending ? -c : c; });
+                // 첫 기준이 같으면 다음 기준으로 (안정 정렬)
+                var keyed = new List<(object item, int idx)>(); for (int i = 0; i < list.Count; i++) keyed.Add((list[i], i));
+                keyed.Sort((x, y) =>
+                {
+                    foreach (var d in SortDescriptions)
+                    {
+                        var va = BindingExpression.GetPathValue(x.item, d.PropertyName); var vb = BindingExpression.GetPathValue(y.item, d.PropertyName);
+                        var c = Comparer.DefaultInvariant.Compare(va, vb);
+                        if (c != 0) return d.Direction == ListSortDirection.Descending ? -c : c;
+                    }
+                    return x.idx.CompareTo(y.idx);
+                });
+                list = keyed.ConvertAll(k => k.item);
             }
             return list.GetEnumerator();
         }

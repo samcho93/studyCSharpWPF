@@ -85,9 +85,22 @@ namespace System.Windows
         {
             Values.TryGetValue(name, out var old);
             Values[name] = value;
+            if (!ReferenceEquals(old, value)) WatchValue(name, old, value);
             if (notify) UiTree.Prop(Id, name, value);
             OnPropertyChanged(name, old, value);
             RaiseLocalChanged(name);
+        }
+        // 브러시 · 변환 · 점 목록의 내용이 바뀌면 (예: rot.Angle = 30, line.Points.Add(p)) 렌더러에 다시 보낸다
+        private Dictionary<string, Action>? _watch;
+        private void WatchValue(string name, object? old, object? value)
+        {
+            if (old is Media.IChangeNotifier on && _watch != null && _watch.TryGetValue(name, out var h)) { on.Changed -= h; _watch.Remove(name); }
+            if (value is Media.IChangeNotifier nn)
+            {
+                Action handler = () => { if (Values.TryGetValue(name, out var cur)) UiTree.Prop(Id, name, cur); RaiseLocalChanged(name); };
+                nn.Changed += handler;
+                (_watch ??= new Dictionary<string, Action>())[name] = handler;
+            }
         }
         /// <summary>요소 속성이 바뀌었음을 ElementName 바인딩 등에 알린다</summary>
         internal event Action<string>? LocalPropertyChanged;
@@ -149,8 +162,9 @@ namespace System.Windows
         public void UpdateLayout() { }
         public void Measure(Size s) { }
         public void Arrange(Rect r) { }
-        public bool CaptureMouse() => true;
-        public void ReleaseMouseCapture() { }
+        public bool CaptureMouse() { Input.Mouse.CapturedElement = this; UiTree.Op("call", Id, "capture"); return true; }
+        public void ReleaseMouseCapture() { if (Input.Mouse.CapturedElement == this) Input.Mouse.CapturedElement = null; UiTree.Op("call", Id, "release"); }
+        public bool IsMouseCaptured => Input.Mouse.CapturedElement == this;
         public void RaiseEvent(RoutedEventArgs e) { }
         // ---------------------------------------------------------------- 라우트된 이벤트 (버블링)
         internal List<(string key, Delegate handler, bool handledToo)>? RoutedHandlers;

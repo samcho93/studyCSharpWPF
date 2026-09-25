@@ -290,13 +290,98 @@ namespace System.Windows.Threading
 namespace System.Windows.Media.Animation
 {
     public enum FillBehavior { HoldEnd, Stop }
-    public struct RepeatBehavior { public double Count; public bool IsForever; public RepeatBehavior(double count) { Count = count; IsForever = false; } public static RepeatBehavior Forever => new RepeatBehavior { IsForever = true }; }
-    public abstract class Timeline { public Duration Duration { get; set; } = new Duration(TimeSpan.FromSeconds(1)); public TimeSpan? BeginTime { get; set; } public RepeatBehavior RepeatBehavior { get; set; } public bool AutoReverse { get; set; } public FillBehavior FillBehavior { get; set; } public double SpeedRatio { get; set; } = 1; public event EventHandler? Completed; internal void RaiseCompleted() => Completed?.Invoke(this, EventArgs.Empty); }
-    public abstract class AnimationTimeline : Timeline { public IEasingFunction? EasingFunction { get; set; } }
-    public interface IEasingFunction { double Ease(double t); }
+    /// <summary>반복 방식: 횟수("3x") · 시간("0:0:5") · 무한("Forever")</summary>
+    public struct RepeatBehavior
+    {
+        private readonly int _kind;   // 0 = 기본(1회), 1 = 횟수, 2 = 시간, 3 = 무한
+        private readonly double _count;
+        private readonly TimeSpan _duration;
+        public RepeatBehavior(double count) { _kind = 1; _count = count; _duration = TimeSpan.Zero; }
+        public RepeatBehavior(TimeSpan duration) { _kind = 2; _count = 0; _duration = duration; }
+        private RepeatBehavior(int kind) { _kind = kind; _count = 0; _duration = TimeSpan.Zero; }
+        public static RepeatBehavior Forever => new RepeatBehavior(3);
+        public bool IsForever => _kind == 3;
+        public bool HasCount => _kind == 1 || _kind == 0;
+        public bool HasDuration => _kind == 2;
+        public double Count => _kind == 1 ? _count : 1;
+        public TimeSpan Duration => _duration;
+        public static RepeatBehavior Parse(string s)
+        {
+            s = s.Trim();
+            if (s.Equals("Forever", StringComparison.OrdinalIgnoreCase)) return Forever;
+            if (s.EndsWith("x", StringComparison.OrdinalIgnoreCase)) return new RepeatBehavior(double.Parse(s.Substring(0, s.Length - 1), Globalization.CultureInfo.InvariantCulture));
+            return new RepeatBehavior(TimeSpan.Parse(s, Globalization.CultureInfo.InvariantCulture));
+        }
+        public override string ToString() => IsForever ? "Forever" : HasDuration ? _duration.ToString() : Count.ToString(Globalization.CultureInfo.InvariantCulture) + "x";
+    }
+    public abstract class Timeline : DependencyObject
+    {
+        public Duration Duration { get; set; } = Duration.Automatic;
+        public TimeSpan? BeginTime { get; set; } = TimeSpan.Zero;
+        public RepeatBehavior RepeatBehavior { get; set; }
+        public bool AutoReverse { get; set; }
+        public FillBehavior FillBehavior { get; set; }
+        public double SpeedRatio { get; set; } = 1;
+        public double AccelerationRatio { get; set; }
+        public double DecelerationRatio { get; set; }
+        public string? Name { get; set; }
+        public event EventHandler? Completed;
+        internal void RaiseCompleted() => Completed?.Invoke(this, EventArgs.Empty);
+        public Timeline Clone() => (Timeline)MemberwiseClone();
+    }
+    public abstract class AnimationTimeline : Timeline { public IEasingFunction? EasingFunction { get; set; } public bool IsAdditive { get; set; } public bool IsCumulative { get; set; } }
+    public interface IEasingFunction { double Ease(double normalizedTime); }
     public enum EasingMode { EaseIn, EaseOut, EaseInOut }
-    public abstract class EasingFunctionBase : IEasingFunction { public EasingMode EasingMode { get; set; } public virtual double Ease(double t) => t; }
-    public class QuadraticEase : EasingFunctionBase { } public class CubicEase : EasingFunctionBase { } public class BounceEase : EasingFunctionBase { public int Bounces { get; set; } = 3; public double Bounciness { get; set; } = 2; } public class ElasticEase : EasingFunctionBase { public int Oscillations { get; set; } = 3; public double Springiness { get; set; } = 3; } public class SineEase : EasingFunctionBase { } public class BackEase : EasingFunctionBase { public double Amplitude { get; set; } = 1; } public class CircleEase : EasingFunctionBase { } public class ExponentialEase : EasingFunctionBase { public double Exponent { get; set; } = 2; } public class PowerEase : EasingFunctionBase { public double Power { get; set; } = 2; } public class QuarticEase : EasingFunctionBase { } public class QuinticEase : EasingFunctionBase { }
+    /// <summary>가속 함수: EaseInCore 를 EasingMode 에 따라 뒤집거나 합친다 (WPF 와 같은 방식)</summary>
+    public abstract class EasingFunctionBase : IEasingFunction
+    {
+        public EasingMode EasingMode { get; set; } = EasingMode.EaseOut;
+        public double Ease(double t)
+        {
+            switch (EasingMode)
+            {
+                case EasingMode.EaseIn: return EaseInCore(t);
+                case EasingMode.EaseOut: return 1 - EaseInCore(1 - t);
+                default: return t < 0.5 ? EaseInCore(t * 2) / 2 : 1 - EaseInCore((1 - t) * 2) / 2;
+            }
+        }
+        protected virtual double EaseInCore(double t) => t;
+    }
+    public class QuadraticEase : EasingFunctionBase { protected override double EaseInCore(double t) => t * t; }
+    public class CubicEase : EasingFunctionBase { protected override double EaseInCore(double t) => t * t * t; }
+    public class QuarticEase : EasingFunctionBase { protected override double EaseInCore(double t) => t * t * t * t; }
+    public class QuinticEase : EasingFunctionBase { protected override double EaseInCore(double t) => t * t * t * t * t; }
+    public class PowerEase : EasingFunctionBase { public double Power { get; set; } = 2; protected override double EaseInCore(double t) => Math.Pow(t, Math.Max(0, Power)); }
+    public class SineEase : EasingFunctionBase { protected override double EaseInCore(double t) => 1 - Math.Sin(Math.PI / 2 * (1 - t)); }
+    public class CircleEase : EasingFunctionBase { protected override double EaseInCore(double t) => 1 - Math.Sqrt(1 - Math.Min(1, t * t)); }
+    public class ExponentialEase : EasingFunctionBase { public double Exponent { get; set; } = 2; protected override double EaseInCore(double t) => Math.Abs(Exponent) < 1e-9 ? t : (Math.Exp(Exponent * t) - 1) / (Math.Exp(Exponent) - 1); }
+    public class BackEase : EasingFunctionBase { public double Amplitude { get; set; } = 1; protected override double EaseInCore(double t) => t * t * t - t * Math.Max(0, Amplitude) * Math.Sin(Math.PI * t); }
+    public class ElasticEase : EasingFunctionBase
+    {
+        public int Oscillations { get; set; } = 3;
+        public double Springiness { get; set; } = 3;
+        protected override double EaseInCore(double t)
+        {
+            var osc = Math.Max(0, Oscillations); var spring = Math.Max(0, Springiness);
+            var exp = Math.Abs(spring) < 1e-9 ? t : (Math.Exp(spring * t) - 1) / (Math.Exp(spring) - 1);
+            return exp * Math.Sin((Math.PI * 2 * osc + Math.PI / 2) * t);
+        }
+    }
+    public class BounceEase : EasingFunctionBase
+    {
+        public int Bounces { get; set; } = 3;
+        public double Bounciness { get; set; } = 2;
+        protected override double EaseInCore(double t) => 1 - Out(1 - t);
+        private static double Out(double t)
+        {
+            // 표준 easeOutBounce (4번 튀기)
+            const double n = 7.5625, d = 2.75;
+            if (t < 1 / d) return n * t * t;
+            if (t < 2 / d) { t -= 1.5 / d; return n * t * t + 0.75; }
+            if (t < 2.5 / d) { t -= 2.25 / d; return n * t * t + 0.9375; }
+            t -= 2.625 / d; return n * t * t + 0.984375;
+        }
+    }
     public class DoubleAnimation : AnimationTimeline
     {
         public double? From { get; set; }
@@ -306,57 +391,306 @@ namespace System.Windows.Media.Animation
         public DoubleAnimation(double to, Duration d) { To = to; Duration = d; }
         public DoubleAnimation(double from, double to, Duration d) { From = from; To = to; Duration = d; }
         public DoubleAnimation(double to, Duration d, FillBehavior fb) { To = to; Duration = d; FillBehavior = fb; }
+        public DoubleAnimation(double from, double to, Duration d, FillBehavior fb) { From = from; To = to; Duration = d; FillBehavior = fb; }
     }
-    public class ColorAnimation : AnimationTimeline { public Color? From { get; set; } public Color? To { get; set; } public ColorAnimation() { } public ColorAnimation(Color to, Duration d) { To = to; Duration = d; } }
-    public class ThicknessAnimation : AnimationTimeline { public Thickness? From { get; set; } public Thickness? To { get; set; } }
-    public class PointAnimation : AnimationTimeline { public Point? From { get; set; } public Point? To { get; set; } }
+    public class ColorAnimation : AnimationTimeline
+    {
+        public Color? From { get; set; }
+        public Color? To { get; set; }
+        public Color? By { get; set; }
+        public ColorAnimation() { }
+        public ColorAnimation(Color to, Duration d) { To = to; Duration = d; }
+        public ColorAnimation(Color from, Color to, Duration d) { From = from; To = to; Duration = d; }
+    }
+    public class ThicknessAnimation : AnimationTimeline
+    {
+        public Thickness? From { get; set; }
+        public Thickness? To { get; set; }
+        public ThicknessAnimation() { }
+        public ThicknessAnimation(Thickness to, Duration d) { To = to; Duration = d; }
+        public ThicknessAnimation(Thickness from, Thickness to, Duration d) { From = from; To = to; Duration = d; }
+    }
+    public class PointAnimation : AnimationTimeline
+    {
+        public Point? From { get; set; }
+        public Point? To { get; set; }
+        public PointAnimation() { }
+        public PointAnimation(Point to, Duration d) { To = to; Duration = d; }
+        public PointAnimation(Point from, Point to, Duration d) { From = from; To = to; Duration = d; }
+    }
     [Markup.ContentProperty("Children")]
     public class Storyboard : Timeline
     {
         public List<Timeline> Children { get; } = new List<Timeline>();
-        public static void SetTargetName(Timeline t, string name) { _targets[t] = name; }
-        public static void SetTargetProperty(Timeline t, PropertyPath p) { _props[t] = p.Path; }
-        public static void SetTarget(Timeline t, DependencyObject d) { _targetObjs[t] = d; }
-        private static readonly Dictionary<Timeline, string> _targets = new Dictionary<Timeline, string>();
-        private static readonly Dictionary<Timeline, string> _props = new Dictionary<Timeline, string>();
-        private static readonly Dictionary<Timeline, DependencyObject> _targetObjs = new Dictionary<Timeline, DependencyObject>();
+        public static void SetTargetName(DependencyObject t, string name) { _targets[t] = name; }
+        public static string? GetTargetName(DependencyObject t) => _targets.TryGetValue(t, out var n) ? n : null;
+        public static void SetTargetProperty(DependencyObject t, PropertyPath p) { _props[t] = p.Path; }
+        public static PropertyPath? GetTargetProperty(DependencyObject t) => _props.TryGetValue(t, out var p) ? new PropertyPath(p) : null;
+        public static void SetTarget(DependencyObject t, DependencyObject d) { _targetObjs[t] = d; }
+        public static DependencyObject? GetTarget(DependencyObject t) => _targetObjs.TryGetValue(t, out var d) ? d : null;
+        private static readonly Dictionary<DependencyObject, string> _targets = new Dictionary<DependencyObject, string>();
+        private static readonly Dictionary<DependencyObject, string> _props = new Dictionary<DependencyObject, string>();
+        private static readonly Dictionary<DependencyObject, DependencyObject> _targetObjs = new Dictionary<DependencyObject, DependencyObject>();
         public void Begin() => Begin(null);
-        public void Begin(FrameworkElement? containingObject)
+        public void Begin(FrameworkElement? containingObject) => Begin(containingObject, false);
+        public void Begin(FrameworkElement? containingObject, bool isControllable)
         {
+            Animator.StopOwner(this, false);
+            int started = 0;
             foreach (var c in Children)
             {
-                DependencyObject? target = _targetObjs.TryGetValue(c, out var to) ? to : (_targets.TryGetValue(c, out var n) && containingObject != null ? containingObject.FindName(n) as DependencyObject : containingObject);
-                if (target is UIElement el && _props.TryGetValue(c, out var prop)) Animator.Run(el, prop, c);
+                DependencyObject? target = _targetObjs.TryGetValue(c, out var to) ? to : null;
+                if (target == null && _targets.TryGetValue(c, out var n)) target = ResolveName(containingObject, n);
+                target ??= (_targetObjs.TryGetValue(this, out var sto) ? sto : null) ?? (_targets.TryGetValue(this, out var sn) ? ResolveName(containingObject, sn) : null) ?? containingObject;
+                var prop = _props.TryGetValue(c, out var p) ? p : _props.TryGetValue(this, out var sp) ? sp : null;
+                if (target != null && prop != null && c is AnimationTimeline at) { Animator.Start(target, prop, at, this); started++; }
             }
+            if (started == 0) RaiseCompleted();
         }
-        public void Stop() { } public void Stop(FrameworkElement e) { } public void Pause() { } public void Resume() { }
+        private static DependencyObject? ResolveName(FrameworkElement? scope, string name)
+        {
+            if (scope != null && scope.FindName(name) is DependencyObject d) return d;
+            // 창이 아직 열리기 전(Loaded 중)일 수 있으므로 조상을 따라 올라가 맨 위 요소(창)에서 찾는다
+            var roots = new List<FrameworkElement>();
+            for (var e = scope; e != null; e = e.ParentElement) if (e.ParentElement == null) roots.Add(e);
+            foreach (var w in UiTree.OpenWindows) roots.Add(w);
+            foreach (var w in roots)
+            {
+                if (w.FindName(name) is DependencyObject d2) return d2;
+                // x:Name 을 붙인 변환 · 브러시(요소가 아닌 객체)는 창의 필드로 찾는다
+                var f = w.GetType().GetField(name, Reflection.BindingFlags.Instance | Reflection.BindingFlags.NonPublic | Reflection.BindingFlags.Public);
+                if (f?.GetValue(w) is DependencyObject d3) return d3;
+            }
+            return null;
+        }
+        public void Stop() => Animator.StopOwner(this, true);
+        public void Stop(FrameworkElement e) => Stop();
+        public void Pause() => Animator.PauseOwner(this, true);
+        public void Pause(FrameworkElement e) => Pause();
+        public void Resume() => Animator.PauseOwner(this, false);
+        public void Resume(FrameworkElement e) => Resume();
+        public void Remove() => Stop();
+        public void Remove(FrameworkElement e) => Stop();
+        public void SkipToFill() => Animator.SkipOwner(this);
+        public void SkipToFill(FrameworkElement e) => SkipToFill();
+        public new Storyboard Clone() => (Storyboard)MemberwiseClone();
     }
     [Markup.ContentProperty("Storyboard")]
     public class BeginStoryboard { public Storyboard? Storyboard { get; set; } public string? Name { get; set; } }
 
-    /// <summary>애니메이션: 렌더러의 CSS 전환에 맡기고, 끝나면 최종 값으로 속성을 설정한다</summary>
+    /// <summary>
+    /// 애니메이션 시계: 약 30ms 마다 진행 중인 모든 애니메이션의 값을 계산해 대상 속성에 직접 쓴다.
+    /// (요소 속성은 SetPropertyValue, 변환 · 브러시는 CLR 속성 → Changed 알림으로 다시 그림)
+    /// </summary>
     internal static class Animator
     {
-        public static void Run(UIElement el, string prop, Timeline t)
+        private sealed class Clock
         {
-            var ms = t.Duration.HasTimeSpan ? t.Duration.TimeSpan.TotalMilliseconds : 1000;
-            // 부착 속성 경로 "(Canvas.Left)" 정리
-            prop = prop.Trim('(', ')');
-            if (t is DoubleAnimation da)
+            public object Obj = null!;          // 값을 쓸 객체 (요소 또는 변환 · 브러시)
+            public string Prop = "";
+            public AnimationTimeline Anim = null!;
+            public Storyboard? Owner;
+            public object? Base;                 // 애니메이션 전 값 (Stop 때 되돌림)
+            public object? From, To;
+            public double Elapsed;               // 진행 시간(ms, SpeedRatio 적용 전)
+            public DateTime Last;
+            public bool Paused, Done;
+        }
+        private static readonly List<Clock> _clocks = new List<Clock>();
+        private static readonly object _lock = new object();
+        private static Timer? _timer;
+
+        /// <summary>BeginAnimation(dp, anim): anim 이 null 이면 그 속성의 애니메이션을 멈추고 원래 값으로</summary>
+        public static void Begin(object target, string prop, AnimationTimeline? anim)
+        {
+            if (anim == null) { StopProp(target, prop, true); return; }
+            Start(target, prop, anim, null);
+        }
+
+        public static void Start(object target, string path, AnimationTimeline anim, Storyboard? owner)
+        {
+            if (!Resolve(target, path, out var obj, out var prop)) return;
+            object? baseVal = null; bool hadBase = false;
+            lock (_lock)
             {
-                var cur = el.GetPropertyValue(prop);
-                double from = da.From ?? (cur is double d0 && !double.IsNaN(d0) ? d0 : 0);
-                double to = da.To ?? (da.By.HasValue ? from + da.By.Value : from);
-                UiTree.Op("anim", el.Id, prop, from, to, ms, t.RepeatBehavior.IsForever, t.AutoReverse);
-                var timer = new Timer(_ => { try { el.SetPropertyValue(prop, to); t.RaiseCompleted(); } catch (Exception ex) { UiTree.ReportException(ex); } finally { UiTree.Flush(); } }, null, (int)ms, Timeout.Infinite);
-                GC.KeepAlive(timer);
+                foreach (var c in _clocks) if (ReferenceEquals(c.Obj, obj) && c.Prop == prop) { c.Done = true; if (!hadBase) { baseVal = c.Base; hadBase = true; } }
+                _clocks.RemoveAll(c => c.Done);
             }
-            else if (t is ColorAnimation ca && ca.To.HasValue)
+            var cur = GetValue(obj, prop);
+            if (!hadBase) baseVal = cur;
+            var clock = new Clock { Obj = obj, Prop = prop, Anim = anim, Owner = owner, Base = baseVal, Last = DateTime.UtcNow };
+            switch (anim)
             {
-                var timer = new Timer(_ => { try { el.SetPropertyValue(prop, new SolidColorBrush(ca.To.Value)); t.RaiseCompleted(); } catch (Exception ex) { UiTree.ReportException(ex); } finally { UiTree.Flush(); } }, null, (int)ms, Timeout.Infinite);
-                UiTree.Op("anim", el.Id, prop, null, ca.To.Value.ToCss(), ms, false, false);
-                GC.KeepAlive(timer);
+                case DoubleAnimation da:
+                {
+                    double c0 = cur is double d0 && !double.IsNaN(d0) ? d0 : 0;
+                    double from = da.From ?? c0;
+                    clock.From = from; clock.To = da.To ?? (da.By.HasValue ? from + da.By.Value : c0);
+                    break;
+                }
+                case ColorAnimation ca:
+                {
+                    var c0 = cur is Color cc ? cc : cur is SolidColorBrush sb ? sb.Color : Colors.Transparent;
+                    var from = ca.From ?? c0;
+                    clock.From = from; clock.To = ca.To ?? (ca.By.HasValue ? Color.FromArgb((byte)Math.Min(255, from.A + ca.By.Value.A), (byte)Math.Min(255, from.R + ca.By.Value.R), (byte)Math.Min(255, from.G + ca.By.Value.G), (byte)Math.Min(255, from.B + ca.By.Value.B)) : c0);
+                    // 요소의 Background 등 브러시 속성: 새 단색 브러시로 바꿔 가며 그린다
+                    if (obj is UIElement && !(cur is Color)) clock.Base = cur;
+                    break;
+                }
+                case ThicknessAnimation ta: { var c0 = cur is Thickness t0 ? t0 : new Thickness(0); clock.From = ta.From ?? c0; clock.To = ta.To ?? c0; break; }
+                case PointAnimation pa: { var c0 = cur is Point p0 ? p0 : new Point(0, 0); clock.From = pa.From ?? c0; clock.To = pa.To ?? c0; break; }
+                default: return;
             }
+            lock (_lock)
+            {
+                _clocks.Add(clock);
+                _timer ??= new Timer(_ => Tick(), null, 0, 30);
+            }
+        }
+
+        private static double DurationMs(Timeline t) => t.Duration.HasTimeSpan ? (t.Duration.TimeSpan == TimeSpan.MaxValue ? double.PositiveInfinity : Math.Max(1, t.Duration.TimeSpan.TotalMilliseconds)) : 1000;
+
+        private static void Tick()
+        {
+            List<Clock> list; List<Clock> finished = new List<Clock>();
+            lock (_lock)
+            {
+                if (UiTree.OpenWindows.Count == 0) { _clocks.Clear(); _timer?.Dispose(); _timer = null; return; }
+                list = new List<Clock>(_clocks);
+            }
+            var now = DateTime.UtcNow;
+            try
+            {
+                foreach (var c in list)
+                {
+                    if (c.Done) continue;
+                    var dt = (now - c.Last).TotalMilliseconds; c.Last = now;
+                    if (c.Paused) continue;
+                    c.Elapsed += dt * (c.Anim.SpeedRatio > 0 ? c.Anim.SpeedRatio : 1) * (c.Owner != null && c.Owner.SpeedRatio > 0 ? c.Owner.SpeedRatio : 1);
+                    var t = c.Elapsed - (c.Anim.BeginTime?.TotalMilliseconds ?? 0) - (c.Owner?.BeginTime?.TotalMilliseconds ?? 0);
+                    if (t < 0) continue;
+                    double dur = DurationMs(c.Anim);
+                    double single = c.Anim.AutoReverse ? dur * 2 : dur;
+                    var rb = c.Anim.RepeatBehavior;
+                    double total = rb.IsForever ? double.PositiveInfinity : rb.HasDuration ? rb.Duration.TotalMilliseconds : single * rb.Count;
+                    double p;
+                    if (t >= total) { p = c.Anim.AutoReverse ? 0 : 1; if (rb.HasCount && rb.Count % 1 != 0) p = Phase(total % single, dur); c.Done = true; }
+                    else p = Phase(t % single, dur);
+                    if (c.Anim.EasingFunction != null) p = c.Anim.EasingFunction.Ease(p);
+                    Apply(c, p);
+                    if (c.Done) finished.Add(c);
+                }
+                lock (_lock) _clocks.RemoveAll(c => c.Done);
+                var owners = new List<Storyboard>();
+                foreach (var c in finished)
+                {
+                    if (c.Anim.FillBehavior == FillBehavior.Stop) SetValue(c.Obj, c.Prop, c.Base);
+                    c.Anim.RaiseCompleted();
+                    if (c.Owner != null && !owners.Contains(c.Owner)) owners.Add(c.Owner);
+                }
+                // 스토리보드의 모든 애니메이션이 끝나면 스토리보드 Completed
+                foreach (var o in owners) { bool any; lock (_lock) any = _clocks.Exists(x => x.Owner == o); if (!any) o.RaiseCompleted(); }
+            }
+            catch (Exception ex) { UiTree.ReportException(ex); }
+            finally { UiTree.Flush(); }
+        }
+        // 한 번의 (왕복) 주기 안에서의 위치 → 0~1 진행률
+        private static double Phase(double local, double dur) { if (double.IsInfinity(dur)) return 0; var p = local / dur; return p > 1 ? 2 - p : p; }
+
+        private static void Apply(Clock c, double p)
+        {
+            object? v;
+            switch (c.From)
+            {
+                case double a: v = a + ((double)c.To! - a) * p; break;
+                case Color a: { var b = (Color)c.To!; v = Color.FromArgb(L(a.A, b.A, p), L(a.R, b.R, p), L(a.G, b.G, p), L(a.B, b.B, p)); break; }
+                case Thickness a: { var b = (Thickness)c.To!; v = new Thickness(a.Left + (b.Left - a.Left) * p, a.Top + (b.Top - a.Top) * p, a.Right + (b.Right - a.Right) * p, a.Bottom + (b.Bottom - a.Bottom) * p); break; }
+                case Point a: { var b = (Point)c.To!; v = new Point(a.X + (b.X - a.X) * p, a.Y + (b.Y - a.Y) * p); break; }
+                default: return;
+            }
+            SetValue(c.Obj, c.Prop, v);
+        }
+        private static byte L(byte a, byte b, double p) => (byte)Math.Max(0, Math.Min(255, Math.Round(a + (b - a) * p)));
+
+        private static object? GetValue(object obj, string prop)
+        {
+            if (obj is UIElement el) return el.GetPropertyValue(prop);
+            return obj.GetType().GetProperty(prop)?.GetValue(obj);
+        }
+        private static void SetValue(object obj, string prop, object? v)
+        {
+            if (obj is UIElement el)
+            {
+                // 브러시 속성에 색 애니메이션: 단색 브러시로 감싼다
+                if (v is Color col) { var pi0 = obj.GetType().GetProperty(prop); if (pi0 != null && typeof(Brush).IsAssignableFrom(pi0.PropertyType)) v = new SolidColorBrush(col); }
+                el.SetPropertyValue(prop, v);
+                return;
+            }
+            var pi = obj.GetType().GetProperty(prop);
+            if (pi != null && pi.CanWrite) pi.SetValue(obj, WpfShim.Conv.To(pi.PropertyType, v));
+        }
+
+        /// <summary>
+        /// 속성 경로 풀이: "Opacity", "(Canvas.Left)", "RenderTransform.Angle",
+        /// "(UIElement.RenderTransform).(RotateTransform.Angle)", "(Rectangle.Fill).(SolidColorBrush.Color)",
+        /// "RenderTransform.Children[0].Angle"
+        /// </summary>
+        private static bool Resolve(object target, string path, out object obj, out string prop)
+        {
+            obj = target; prop = "";
+            var segs = new List<string>(); int depth = 0; var cur = new Text.StringBuilder();
+            foreach (var ch in path.Trim())
+            {
+                if (ch == '(') depth++; else if (ch == ')') depth--;
+                if (ch == '.' && depth == 0) { segs.Add(cur.ToString()); cur.Clear(); continue; }
+                cur.Append(ch);
+            }
+            if (cur.Length > 0) segs.Add(cur.ToString());
+            for (int i = 0; i < segs.Count; i++)
+            {
+                var s = segs[i].Trim(); int? index = null;
+                var br = s.LastIndexOf('[');
+                if (br > 0 && s.EndsWith("]")) { if (int.TryParse(s.Substring(br + 1, s.Length - br - 2), out var ix)) index = ix; s = s.Substring(0, br); }
+                s = s.Trim('(', ')');
+                var dot = s.LastIndexOf('.');
+                string name = s;
+                if (dot > 0)
+                {
+                    var owner = s.Substring(0, dot);
+                    name = s.Substring(dot + 1);
+                    // 부착 속성 (Canvas.Left 등) 은 이름 그대로, 나머지 "형식.속성" 은 속성 이름만
+                    if (owner is "Canvas" or "Grid" or "DockPanel") name = owner + "." + name;
+                }
+                if (i == segs.Count - 1 && index == null) { prop = name; return true; }
+                var next = GetValue(obj, name);
+                if (index != null && next is Collections.IList l && index.Value < l.Count) next = l[index.Value];
+                if (next == null) return false;
+                obj = next;
+            }
+            return false;
+        }
+
+        public static void StopProp(object target, string prop, bool restore)
+        {
+            List<Clock> rm;
+            lock (_lock) { rm = _clocks.FindAll(c => ReferenceEquals(c.Obj, target) && c.Prop == prop); _clocks.RemoveAll(c => rm.Contains(c)); }
+            foreach (var c in rm) { c.Done = true; if (restore) SetValue(c.Obj, c.Prop, c.Base); }
+            UiTree.Flush();
+        }
+        public static void StopOwner(Storyboard sb, bool restore)
+        {
+            List<Clock> rm;
+            lock (_lock) { rm = _clocks.FindAll(c => c.Owner == sb); _clocks.RemoveAll(c => c.Owner == sb); }
+            foreach (var c in rm) { c.Done = true; if (restore) SetValue(c.Obj, c.Prop, c.Base); }
+            if (restore) UiTree.Flush();
+        }
+        public static void PauseOwner(Storyboard sb, bool pause) { lock (_lock) foreach (var c in _clocks) if (c.Owner == sb) { c.Paused = pause; c.Last = DateTime.UtcNow; } }
+        public static void SkipOwner(Storyboard sb)
+        {
+            List<Clock> rm;
+            lock (_lock) { rm = _clocks.FindAll(c => c.Owner == sb); _clocks.RemoveAll(c => c.Owner == sb); }
+            foreach (var c in rm) { c.Done = true; Apply(c, c.Anim.AutoReverse ? 0 : 1); }
+            UiTree.Flush();
         }
     }
 }
@@ -367,13 +701,10 @@ namespace System.Windows
     {
         public static void BeginAnimation(this UIElement el, DependencyProperty dp, Media.Animation.AnimationTimeline? animation)
         {
-            if (animation == null) return;
             var name = dp.IsAttached ? dp.OwnerType.Name + "." + dp.Name : dp.Name;
-            Media.Animation.Storyboard.SetTargetProperty(animation, new PropertyPath(name));
-            Media.Animation.Storyboard.SetTarget(animation, el);
-            var sb = new Media.Animation.Storyboard();
-            sb.Children.Add(animation);
-            sb.Begin();
+            Media.Animation.Animator.Begin(el, name, animation);
         }
+        public static void BeginAnimation(this UIElement el, DependencyProperty dp, Media.Animation.AnimationTimeline? animation, Media.Animation.HandoffBehavior handoff) => BeginAnimation(el, dp, animation);
+        public static void BeginStoryboard(this FrameworkElement el, Media.Animation.Storyboard sb) => sb.Begin(el);
     }
 }

@@ -108,7 +108,23 @@ namespace System.Windows
         public static Rect Empty => new Rect(0, 0, -1, -1);
         public bool Contains(Point p) => p.X >= X && p.X <= Right && p.Y >= Y && p.Y <= Bottom;
         public bool Contains(double x, double y) => Contains(new Point(x, y));
-        public bool IntersectsWith(Rect r) => !(r.Left > Right || r.Right < Left || r.Top > Bottom || r.Bottom < Top);
+        public bool IntersectsWith(Rect r) => !IsEmpty && !r.IsEmpty && !(r.Left > Right || r.Right < Left || r.Top > Bottom || r.Bottom < Top);
+        public bool Contains(Rect r) => !IsEmpty && !r.IsEmpty && r.X >= X && r.Y >= Y && r.Right <= Right && r.Bottom <= Bottom;
+        /// <summary>겹치는 영역으로 바꾼다 (겹치지 않으면 Empty)</summary>
+        public void Intersect(Rect r)
+        {
+            if (!IntersectsWith(r)) { this = Empty; return; }
+            double l = Math.Max(Left, r.Left), t = Math.Max(Top, r.Top), rt = Math.Min(Right, r.Right), b = Math.Min(Bottom, r.Bottom);
+            X = l; Y = t; Width = Math.Max(0, rt - l); Height = Math.Max(0, b - t);
+        }
+        public static Rect Intersect(Rect a, Rect b) { a.Intersect(b); return a; }
+        public void Union(Rect r)
+        {
+            if (IsEmpty) { this = r; return; } if (r.IsEmpty) return;
+            double l = Math.Min(Left, r.Left), t = Math.Min(Top, r.Top), rt = Math.Max(Right, r.Right), b = Math.Max(Bottom, r.Bottom);
+            X = l; Y = t; Width = rt - l; Height = b - t;
+        }
+        public static Rect Union(Rect a, Rect b) { a.Union(b); return a; }
         public void Offset(double dx, double dy) { X += dx; Y += dy; }
         public void Inflate(double w, double h) { X -= w; Y -= h; Width += 2 * w; Height += 2 * h; }
         public override string ToString() => FormattableString.Invariant($"{X},{Y},{Width},{Height}");
@@ -391,8 +407,14 @@ namespace System.Windows
     {
         public string Path { get; }
         public PropertyPath(string path) { Path = path; }
-        public PropertyPath(object path) { Path = path?.ToString() ?? ""; }
-        public PropertyPath(string path, params object[] pathParameters) { Path = path; }
+        public PropertyPath(object path) { Path = path is DependencyProperty dp ? (dp.IsAttached ? "(" + dp.OwnerType.Name + "." + dp.Name + ")" : dp.Name) : path?.ToString() ?? ""; }
+        /// <summary>"(0).(1)" 처럼 번호 자리에 의존 속성을 넣는 경로</summary>
+        public PropertyPath(string path, params object[] pathParameters)
+        {
+            for (int i = 0; i < pathParameters.Length; i++)
+                if (pathParameters[i] is DependencyProperty dp) path = path.Replace("(" + i + ")", "(" + dp.OwnerType.Name + "." + dp.Name + ")");
+            Path = path;
+        }
         public override string ToString() => Path;
     }
 

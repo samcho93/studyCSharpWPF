@@ -111,6 +111,11 @@
       // WPF 창 안에서는 브라우저 단축키(Ctrl+S 페이지 저장, Ctrl+N 새 창 …) 대신 프로그램의 명령이 받는다
       if ((e.ctrlKey || e.metaKey) && /^[snopfhrwdgjkl]$/i.test(e.key)) e.preventDefault();
       if (e.key === 'F1' || e.key === 'F3' || e.key === 'F5' || e.key === 'F7') e.preventDefault();
+      // 입력 칸 밖(게임 화면 등)에서 스페이스 · 방향키가 강좌 페이지를 스크롤하지 않도록
+      const tg = e.target && e.target.tagName;
+      if (/^( |Spacebar|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|PageUp|PageDown|Home|End)$/.test(e.key) && !/^(INPUT|TEXTAREA|SELECT)$/.test(tg || '')) {
+        if (!(e.key === ' ' && tg === 'BUTTON')) e.preventDefault();
+      }
       keyEvent(rec.id, e, 'keydown'); send(0, 'keystate', keyArgs(e, 'keydown'));
     });
     frame.addEventListener('keyup', (e) => { keyEvent(rec.id, e, 'keyup'); send(0, 'keystate', keyArgs(e, 'keyup')); });
@@ -715,7 +720,15 @@
       }
       case 'TextBox': case 'RichTextBox':
         n.addEventListener('input', () => { el.props.Text = n.value; send(el.id, 'input', { value: n.value, selStart: n.selectionStart || 0 }); });
-        n.addEventListener('select', () => send(el.id, 'select', { selStart: n.selectionStart || 0, selLength: (n.selectionEnd || 0) - (n.selectionStart || 0) }));
+        {
+          // 캐럿 · 선택 영역이 바뀌면 알린다 (방향키 · 클릭 포함) — WPF 의 SelectionChanged
+          let lastSel = '';
+          const reportSel = () => { const s = n.selectionStart || 0, l = (n.selectionEnd || 0) - s, k = s + ':' + l; if (k === lastSel) return; lastSel = k; send(el.id, 'select', { selStart: s, selLength: l }); };
+          n.addEventListener('select', reportSel);
+          n.addEventListener('keyup', (e) => { if (/^(Arrow|Home|End|Page)/.test(e.key)) reportSel(); });
+          n.addEventListener('mouseup', () => setTimeout(reportSel, 0));
+          n.addEventListener('input', () => { lastSel = (n.selectionStart || 0) + ':0'; });
+        }
         n.addEventListener('keydown', (e) => { if (e.key === 'Enter' && n.tagName === 'INPUT') { const w = findWindow(el); const def = w && w.rec.dom.querySelector('.wpf-button.wpf-default'); if (def && !el.props.AcceptsReturn) { setTimeout(() => def.click(), 0); } } });
         break;
       case 'PasswordBox': n.addEventListener('input', () => { el.props.Password = n.value; send(el.id, 'input', { value: n.value }); }); break;
@@ -784,7 +797,27 @@
     }
   }
   const _paint = paint;
-  paint = function (el) { _paint(el); if (el.props.$events) bindGeneric(el); };
+  paint = function (el) {
+    _paint(el);
+    if (el.props.$events) bindGeneric(el);
+    // Focusable="False": 클릭해도 포커스를 가져가지 않는다 (계산기 버튼 등 — 키 입력은 창이 계속 받음)
+    const n = el.dom;
+    if (n && el.props.Focusable === false && !n.dataset.nofocus) {
+      n.dataset.nofocus = '1'; n.tabIndex = -1;
+      n.addEventListener('mousedown', (e) => { if (el.props.Focusable === false) e.preventDefault(); });
+    }
+  };
+
+  // 마우스 캡처 (CaptureMouse): 요소 밖으로 나가도 이동 · 놓기 이벤트를 그 요소가 받는다
+  let captured = null, capT = 0;
+  function sendCaptured(e, ev) {
+    if (!captured || !captured.dom || !captured.bound || !captured.bound.has(ev)) return;
+    if (captured.dom.contains(e.target)) return;   // 안쪽이면 원래 처리기가 보낸다
+    if (ev === 'mousemove') { const now = performance.now(); if (now - capT < 25) return; capT = now; }
+    send(captured.id, ev, relArgs(captured, e, { name: ev, src: captured.id }));
+  }
+  document.addEventListener('mousemove', (e) => sendCaptured(e, 'mousemove'), true);
+  document.addEventListener('mouseup', (e) => { sendCaptured(e, 'mouseup'); }, true);
 
   function bindContextMenu(el, n) {
     if (n.dataset.ctx) return;
@@ -820,6 +853,8 @@
       case 'scrollToTop': (inp || n).scrollTop = 0; break;
       case 'scrollTo': (inp || n).scrollTop = args[0] || 0; break;
       case 'scrollIntoView': n.scrollIntoView({ block: 'nearest' }); break;
+      case 'capture': captured = el; break;
+      case 'release': if (captured === el) captured = null; break;
     }
   }
   function animOp(id, prop, from, to, ms, forever, autoReverse) {

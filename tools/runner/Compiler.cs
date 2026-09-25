@@ -22,7 +22,7 @@ public static class Compiler
     public static readonly string[] WantedReferences =
     {
         "System.Private.CoreLib", "System.Runtime", "System.Console", "System.Collections", "System.Collections.Concurrent", "System.Collections.NonGeneric", "System.Collections.Specialized", "System.Collections.Immutable",
-        "System.Linq", "System.Linq.Expressions", "System.Linq.Parallel", "System.Text.RegularExpressions", "System.Text.Json", "System.Text.Encoding.Extensions", "System.Text.Encoding",
+        "System.Linq", "System.Linq.Expressions", "System.Linq.Parallel", "System.Text.RegularExpressions", "System.Text.Json", "System.Text.Encodings.Web", "System.Text.Encoding.Extensions", "System.Text.Encoding",
         "System.ObjectModel", "System.ComponentModel", "System.ComponentModel.Primitives", "System.ComponentModel.TypeConverter", "System.ComponentModel.Annotations", "System.ComponentModel.EventBasedAsync",
         "System.Runtime.InteropServices", "System.Runtime.Extensions", "System.Runtime.Numerics", "System.Runtime.Serialization.Primitives", "System.Runtime.Intrinsics",
         "System.Threading", "System.Threading.Tasks", "System.Threading.Tasks.Parallel", "System.Threading.Thread", "System.Threading.Timer", "System.Threading.Channels",

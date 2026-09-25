@@ -251,7 +251,14 @@ namespace System.Windows.Controls
             UIElement.RaiseRouted(this, TextChangedEvent, e);
         }
         public void SelectAll() => UiTree.Op("call", Id, "selectAll");
-        public void Select(int start, int length) => UiTree.Op("call", Id, "select", start, length);
+        public void Select(int start, int length)
+        {
+            // 값을 바로 반영 (같은 처리기 안에서 SelectionStart 를 다시 읽어도 새 위치)
+            Values["SelectionStart"] = start; Values["SelectionLength"] = length; Values["CaretIndex"] = start + length;
+            UiTree.Op("call", Id, "select", start, length);
+            RaiseSelectionChanged();
+        }
+        internal void RaiseSelectionChanged() => SelectionChanged?.Invoke(this, new RoutedEventArgs { Source = this, OriginalSource = this });
         public void ScrollToEnd() => UiTree.Op("call", Id, "scrollToEnd");
         public void ScrollToHome() => UiTree.Op("call", Id, "scrollToTop");
         public void ScrollToLine(int line) { }
@@ -285,7 +292,14 @@ namespace System.Windows.Controls
         public string SelectedText { get { var t = Text; var s = Math.Min(SelectionStart, t.Length); var l = Math.Min(SelectionLength, t.Length - s); return t.Substring(s, l); } set { var t = Text; var s = Math.Min(SelectionStart, t.Length); var l = Math.Min(SelectionLength, t.Length - s); Text = t.Substring(0, s) + value + t.Substring(s + l); } }
         public int LineCount => Text.Split('\n').Length;
         public string GetLineText(int i) { var ls = Text.Split('\n'); return i < ls.Length ? ls[i] : ""; }
-        public int GetLineIndexFromCharacterIndex(int i) => Text.Substring(0, Math.Min(i, Text.Length)).Count(c => c == '\n');
+        public int GetLineIndexFromCharacterIndex(int i) => Text.Substring(0, Math.Max(0, Math.Min(i, Text.Length))).Count(c => c == '\n');
+        public int GetCharacterIndexFromLineIndex(int line)
+        {
+            var t = Text; int idx = 0;
+            for (int l = 0; l < line; l++) { var n = t.IndexOf('\n', idx); if (n < 0) return -1; idx = n + 1; }
+            return idx;
+        }
+        public int GetLineLength(int line) { var ls = Text.Split('\n'); return line < ls.Length ? ls[line].Length + (line < ls.Length - 1 ? 1 : 0) : 0; }
         internal override void HandleDomEvent(string name, JsonElement a)
         {
             if (name == "input")
@@ -295,7 +309,14 @@ namespace System.Windows.Controls
                 if (v != Text) { SetFromUi("Text", v); RaiseTextChanged(); }
                 return;
             }
-            if (name == "select") { Values["SelectionStart"] = (int)D(a, "selStart"); Values["SelectionLength"] = (int)D(a, "selLength"); Values["CaretIndex"] = (int)D(a, "selStart"); return; }
+            if (name == "select")
+            {
+                int s = (int)D(a, "selStart"), l = (int)D(a, "selLength");
+                bool changed = s != SelectionStart || l != SelectionLength;
+                Values["SelectionStart"] = s; Values["SelectionLength"] = l; Values["CaretIndex"] = s + l;
+                if (changed) RaiseSelectionChanged();
+                return;
+            }
             base.HandleDomEvent(name, a);
         }
         public override string ToString() => Text;
@@ -556,10 +577,12 @@ namespace System.Windows.Controls
             get => _itemsSource;
             set
             {
-                if (_itemsSource is INotifyCollectionChanged oldN) oldN.CollectionChanged -= OnSourceChanged;
+                if (_view is INotifyCollectionChanged oldN) oldN.CollectionChanged -= OnSourceChanged;
                 _itemsSource = value;
+                // 실제 WPF 처럼 컬렉션의 기본 뷰를 통해 표시 → GetDefaultView(list).Filter 가 바로 적용된다
+                _view = value == null ? null : value is string ? value : (IEnumerable)CollectionViewSource.GetDefaultView(value);
                 LocalSet.Add("ItemsSource");
-                if (_itemsSource is INotifyCollectionChanged n) n.CollectionChanged += OnSourceChanged;
+                if (_view is INotifyCollectionChanged n) n.CollectionChanged += OnSourceChanged;
                 Regenerate();
                 RaiseLocalChanged("ItemsSource");
             }
@@ -572,7 +595,8 @@ namespace System.Windows.Controls
         public bool HasItems => ItemList.Count > 0;
         public bool IsGrouping => false;
         public ItemContainerGenerator ItemContainerGenerator { get; }
-        internal IEnumerable Source => _itemsSource ?? (IEnumerable)Items;
+        private IEnumerable? _view;
+        internal IEnumerable Source => _view ?? (IEnumerable)Items;
 
         private void OnSourceChanged(object? s, NotifyCollectionChangedEventArgs e) => Regenerate();
 

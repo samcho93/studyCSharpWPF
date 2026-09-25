@@ -3,8 +3,26 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
+namespace System.Windows.Media.Animation
+{
+    /// <summary>값이 바뀌면 알리는 객체 (브러시 · 변환 등): 요소가 구독해 렌더러에 다시 보낸다</summary>
+    public abstract class Animatable : DependencyObject, IChangeNotifier
+    {
+        public event Action? Changed;
+        protected void OnChanged() => Changed?.Invoke();
+        internal void ClearChanged() => Changed = null;
+        public void BeginAnimation(DependencyProperty dp, AnimationTimeline? animation) => Animator.Begin(this, dp.Name, animation);
+        public void BeginAnimation(DependencyProperty dp, AnimationTimeline? animation, HandoffBehavior handoff) => Animator.Begin(this, dp.Name, animation);
+        public bool HasAnimatedProperties => false;
+    }
+    public enum HandoffBehavior { SnapshotAndReplace, Compose }
+}
+
 namespace System.Windows.Media
 {
+    /// <summary>내용이 바뀌었음을 알리는 객체</summary>
+    public interface IChangeNotifier { event Action? Changed; }
+
     public struct Color : IEquatable<Color>
     {
         public byte A, R, G, B;
@@ -92,9 +110,11 @@ namespace System.Windows.Media
     }
 
     // ------------------------------------------------------------------ 브러시
-    public abstract class Brush
+    public abstract class Brush : Animation.Animatable
     {
-        public double Opacity { get; set; } = 1;
+        public static readonly DependencyProperty OpacityProperty = DependencyProperty.Register("Opacity", typeof(double), typeof(Brush));
+        private double _opacity = 1;
+        public double Opacity { get => _opacity; set { _opacity = value; OnChanged(); } }
         /// <summary>CSS background/color 값</summary>
         public abstract string ToCss();
         public override string ToString() => ToCss();
@@ -104,7 +124,7 @@ namespace System.Windows.Media
             if (s.StartsWith("{")) throw new FormatException("마크업 확장은 여기서 처리하지 않습니다: " + s);
             return new SolidColorBrush(Color.Parse(s));
         }
-        public Brush Clone() => (Brush)MemberwiseClone();
+        public Brush Clone() { var b = (Brush)MemberwiseClone(); b.ClearChanged(); return b; }
         public void Freeze() { }
         public bool IsFrozen => false;
         public bool CanFreeze => true;
@@ -113,7 +133,9 @@ namespace System.Windows.Media
 
     public class SolidColorBrush : Brush
     {
-        public Color Color { get; set; }
+        public static readonly DependencyProperty ColorProperty = DependencyProperty.Register("Color", typeof(Color), typeof(SolidColorBrush));
+        private Color _color;
+        public Color Color { get => _color; set { _color = value; OnChanged(); } }
         public SolidColorBrush() { Color = Colors.Transparent; }
         public SolidColorBrush(Color color) { Color = color; }
         public override string ToCss() => Opacity >= 1 ? Color.ToCss() : FormattableString.Invariant($"rgba({Color.R},{Color.G},{Color.B},{Color.A / 255.0 * Opacity:0.###})");
@@ -203,11 +225,20 @@ namespace System.Windows.Media
     public enum PenLineJoin { Miter, Bevel, Round }
     public enum FillRule { EvenOdd, Nonzero }
 
-    public class PointCollection : List<Point>
+    /// <summary>점 목록: Add · 인덱서로 바꾸면 도형이 다시 그려진다</summary>
+    public class PointCollection : System.Collections.ObjectModel.Collection<Point>, IChangeNotifier
     {
+        public event Action? Changed;
         public PointCollection() { }
-        public PointCollection(IEnumerable<Point> pts) : base(pts) { }
-        public override string ToString() => string.Join(" ", ConvertAll(p => p.ToString()));
+        public PointCollection(int capacity) { }
+        public PointCollection(IEnumerable<Point> pts) { foreach (var p in pts) Items.Add(p); }
+        protected override void InsertItem(int index, Point item) { base.InsertItem(index, item); Changed?.Invoke(); }
+        protected override void SetItem(int index, Point item) { base.SetItem(index, item); Changed?.Invoke(); }
+        protected override void RemoveItem(int index) { base.RemoveItem(index); Changed?.Invoke(); }
+        protected override void ClearItems() { base.ClearItems(); Changed?.Invoke(); }
+        public PointCollection Clone() => new PointCollection(this);
+        public void Freeze() { }
+        public override string ToString() { var sb = new StringBuilder(); foreach (var p in Items) { if (sb.Length > 0) sb.Append(' '); sb.Append(p.ToString()); } return sb.ToString(); }
         public static PointCollection Parse(string s)
         {
             var pc = new PointCollection();
@@ -259,54 +290,90 @@ namespace System.Windows.Media
     }
 
     // ------------------------------------------------------------------ 변환
-    public abstract class Transform
+    public abstract class Transform : Animation.Animatable
     {
         public abstract string ToCss();
         public override string ToString() => ToCss();
         public static Transform Identity => new MatrixTransform();
         public static Transform Parse(string s) => new MatrixTransform();
+        protected static string F(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+        /// <summary>중심점(CenterX/Y) 기준 변환: 옮기고 → 변환 → 되돌리기</summary>
+        protected static string Around(double cx, double cy, string t) => cx == 0 && cy == 0 ? t : $"translate({F(cx)}px,{F(cy)}px) {t} translate({F(-cx)}px,{F(-cy)}px)";
+        public Transform Clone() { var t = (Transform)MemberwiseClone(); t.ClearChanged(); return t; }
+        public Transform Inverse => new MatrixTransform();
     }
     public class MatrixTransform : Transform { public override string ToCss() => "none"; }
     public class RotateTransform : Transform
     {
-        public double Angle { get; set; }
-        public double CenterX { get; set; }
-        public double CenterY { get; set; }
+        public static readonly DependencyProperty AngleProperty = DependencyProperty.Register("Angle", typeof(double), typeof(RotateTransform));
+        public static readonly DependencyProperty CenterXProperty = DependencyProperty.Register("CenterX", typeof(double), typeof(RotateTransform));
+        public static readonly DependencyProperty CenterYProperty = DependencyProperty.Register("CenterY", typeof(double), typeof(RotateTransform));
+        private double _a, _cx, _cy;
+        public double Angle { get => _a; set { _a = value; OnChanged(); } }
+        public double CenterX { get => _cx; set { _cx = value; OnChanged(); } }
+        public double CenterY { get => _cy; set { _cy = value; OnChanged(); } }
         public RotateTransform() { }
-        public RotateTransform(double angle) { Angle = angle; }
-        public RotateTransform(double angle, double cx, double cy) { Angle = angle; CenterX = cx; CenterY = cy; }
-        public override string ToCss() => FormattableString.Invariant($"rotate({Angle}deg)");
+        public RotateTransform(double angle) { _a = angle; }
+        public RotateTransform(double angle, double cx, double cy) { _a = angle; _cx = cx; _cy = cy; }
+        public override string ToCss() => Around(_cx, _cy, $"rotate({F(_a)}deg)");
     }
     public class ScaleTransform : Transform
     {
-        public double ScaleX { get; set; } = 1;
-        public double ScaleY { get; set; } = 1;
-        public double CenterX { get; set; }
-        public double CenterY { get; set; }
+        public static readonly DependencyProperty ScaleXProperty = DependencyProperty.Register("ScaleX", typeof(double), typeof(ScaleTransform));
+        public static readonly DependencyProperty ScaleYProperty = DependencyProperty.Register("ScaleY", typeof(double), typeof(ScaleTransform));
+        public static readonly DependencyProperty CenterXProperty = DependencyProperty.Register("CenterX", typeof(double), typeof(ScaleTransform));
+        public static readonly DependencyProperty CenterYProperty = DependencyProperty.Register("CenterY", typeof(double), typeof(ScaleTransform));
+        private double _sx = 1, _sy = 1, _cx, _cy;
+        public double ScaleX { get => _sx; set { _sx = value; OnChanged(); } }
+        public double ScaleY { get => _sy; set { _sy = value; OnChanged(); } }
+        public double CenterX { get => _cx; set { _cx = value; OnChanged(); } }
+        public double CenterY { get => _cy; set { _cy = value; OnChanged(); } }
         public ScaleTransform() { }
-        public ScaleTransform(double sx, double sy) { ScaleX = sx; ScaleY = sy; }
-        public override string ToCss() => FormattableString.Invariant($"scale({ScaleX},{ScaleY})");
+        public ScaleTransform(double sx, double sy) { _sx = sx; _sy = sy; }
+        public ScaleTransform(double sx, double sy, double cx, double cy) { _sx = sx; _sy = sy; _cx = cx; _cy = cy; }
+        public override string ToCss() => Around(_cx, _cy, $"scale({F(_sx)},{F(_sy)})");
     }
     public class TranslateTransform : Transform
     {
-        public double X { get; set; }
-        public double Y { get; set; }
+        public static readonly DependencyProperty XProperty = DependencyProperty.Register("X", typeof(double), typeof(TranslateTransform));
+        public static readonly DependencyProperty YProperty = DependencyProperty.Register("Y", typeof(double), typeof(TranslateTransform));
+        private double _x, _y;
+        public double X { get => _x; set { _x = value; OnChanged(); } }
+        public double Y { get => _y; set { _y = value; OnChanged(); } }
         public TranslateTransform() { }
-        public TranslateTransform(double x, double y) { X = x; Y = y; }
-        public override string ToCss() => FormattableString.Invariant($"translate({X}px,{Y}px)");
+        public TranslateTransform(double x, double y) { _x = x; _y = y; }
+        public override string ToCss() => $"translate({F(_x)}px,{F(_y)}px)";
     }
     public class SkewTransform : Transform
     {
-        public double AngleX { get; set; }
-        public double AngleY { get; set; }
-        public override string ToCss() => FormattableString.Invariant($"skew({AngleX}deg,{AngleY}deg)");
+        public static readonly DependencyProperty AngleXProperty = DependencyProperty.Register("AngleX", typeof(double), typeof(SkewTransform));
+        public static readonly DependencyProperty AngleYProperty = DependencyProperty.Register("AngleY", typeof(double), typeof(SkewTransform));
+        private double _ax, _ay, _cx, _cy;
+        public double AngleX { get => _ax; set { _ax = value; OnChanged(); } }
+        public double AngleY { get => _ay; set { _ay = value; OnChanged(); } }
+        public double CenterX { get => _cx; set { _cx = value; OnChanged(); } }
+        public double CenterY { get => _cy; set { _cy = value; OnChanged(); } }
+        public SkewTransform() { }
+        public SkewTransform(double ax, double ay) { _ax = ax; _ay = ay; }
+        public override string ToCss() => Around(_cx, _cy, $"skew({F(_ax)}deg,{F(_ay)}deg)");
     }
-    public class TransformCollection : List<Transform> { }
+    public class TransformCollection : System.Collections.ObjectModel.Collection<Transform>
+    {
+        internal Action? Changed;
+        private void Child() => Changed?.Invoke();
+        protected override void InsertItem(int index, Transform item) { base.InsertItem(index, item); item.Changed += Child; Changed?.Invoke(); }
+        protected override void SetItem(int index, Transform item) { this[index].Changed -= Child; base.SetItem(index, item); item.Changed += Child; Changed?.Invoke(); }
+        protected override void RemoveItem(int index) { this[index].Changed -= Child; base.RemoveItem(index); Changed?.Invoke(); }
+        protected override void ClearItems() { foreach (var t in Items) t.Changed -= Child; base.ClearItems(); Changed?.Invoke(); }
+    }
     [Markup.ContentProperty("Children")]
     public class TransformGroup : Transform
     {
-        public TransformCollection Children { get; set; } = new TransformCollection();
-        public override string ToCss() { var sb = new StringBuilder(); foreach (var t in Children) { if (sb.Length > 0) sb.Append(' '); sb.Append(t.ToCss()); } return sb.Length == 0 ? "none" : sb.ToString(); }
+        private TransformCollection _children = null!;
+        public TransformGroup() { Children = new TransformCollection(); }
+        public TransformCollection Children { get => _children; set { if (_children != null) _children.Changed = null; _children = value; _children.Changed = OnChanged; OnChanged(); } }
+        // WPF 는 첫 자식부터 차례로 적용하고, CSS transform 목록은 오른쪽 것부터 적용하므로 순서를 뒤집는다
+        public override string ToCss() { var sb = new StringBuilder(); for (int i = _children.Count - 1; i >= 0; i--) { var c = _children[i].ToCss(); if (c == "none") continue; if (sb.Length > 0) sb.Append(' '); sb.Append(c); } return sb.Length == 0 ? "none" : sb.ToString(); }
     }
 
     public abstract class ImageSource

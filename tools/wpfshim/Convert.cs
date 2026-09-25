@@ -43,7 +43,8 @@ namespace WpfShim
             if (target == typeof(decimal)) return decimal.Parse(t, ci);
             if (target == typeof(bool)) return bool.Parse(t);
             if (target == typeof(char)) return t.Length > 0 ? t[0] : '\0';
-            if (target.IsEnum) return Enum.Parse(target, t.Replace(" ", ""), true);
+            // 플래그 열거형은 "Control+Shift" 도 허용 (WPF 의 ModifierKeys 변환기와 같다)
+            if (target.IsEnum) return Enum.Parse(target, t.Replace(" ", "").Replace('+', ',').Replace("Ctrl", "Control", StringComparison.OrdinalIgnoreCase).Replace("ControlControl", "Control"), true);
             if (target == typeof(Thickness)) return Thickness.Parse(t);
             if (target == typeof(CornerRadius)) return CornerRadius.Parse(t);
             if (target == typeof(GridLength)) return GridLength.Parse(t);

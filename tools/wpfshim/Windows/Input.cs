@@ -213,7 +213,13 @@ namespace System.Windows.Input
         public static MouseButtonState RightButton { get; internal set; }
         public static Point GetPosition(IInputElement? relativeTo) => new Point(LastX, LastY);
         public static IInputElement? Captured { get; internal set; }
-        public static bool Capture(IInputElement? e) { Captured = e; return true; }
+        internal static UIElement? CapturedElement { get => Captured as UIElement; set => Captured = value; }
+        public static bool Capture(IInputElement? e)
+        {
+            if (e is UIElement u) return u.CaptureMouse();
+            (Captured as UIElement)?.ReleaseMouseCapture();
+            return true;
+        }
         public static Cursor? OverrideCursor { get; set; }
         public static MouseDevice PrimaryDevice { get; } = new MouseDevice();
         public static void FromDom(JsonElement a) { LastX = UIElement.D(a, "wx"); LastY = UIElement.D(a, "wy"); var b = (int)UIElement.D(a, "buttons"); LeftButton = (b & 1) != 0 ? MouseButtonState.Pressed : MouseButtonState.Released; RightButton = (b & 2) != 0 ? MouseButtonState.Pressed : MouseButtonState.Released; }
