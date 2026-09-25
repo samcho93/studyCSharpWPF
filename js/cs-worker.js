@@ -97,13 +97,18 @@ async function init(m) {
   post({ type: 'status', message: '.NET 런타임 준비 중…', pct: 0 });
   // .NET 9: 파일 이름에 지문(fingerprint)이 붙는다 → 논리 이름(System.Runtime.dll) 으로 되돌리는 표
   let fp = {};
-  try { const boot = await (await fetch(base + '_framework/blazor.boot.json', { cache: 'no-cache' })).json(); fp = (boot.resources && boot.resources.fingerprinting) || {}; } catch (e) { /* 무시 */ }
+  // 배포할 때마다 파일 지문이 바뀌므로, 설정 파일(blazor.boot.json)은 manifest 내용으로 만든 버전을 붙여 캐시를 피한다
+  let stamp = 0; for (const f of manifest.files) for (let i = 0; i < f.name.length; i++) stamp = (stamp * 31 + f.name.charCodeAt(i)) | 0;
+  const bootUrl = base + '_framework/blazor.boot.json?v=' + (stamp >>> 0).toString(36);
+  try { const boot = await (await fetch(bootUrl, { cache: 'no-cache' })).json(); fp = (boot.resources && boot.resources.fingerprinting) || {}; } catch (e) { /* 무시 */ }
   const logical = (f) => (fp[f] || f);
   const { dotnet } = await import(base + '_framework/dotnet.js');
   runtime = await dotnet
-    .withConfigSrc(base + '_framework/blazor.boot.json')
+    .withConfigSrc(bootUrl)
     .withResourceLoader((type, name, defaultUri, integrity, behavior) => {
-      if (type === 'dotnetjs' || type === 'js-module-dotnet' || type === 'js-module-native' || type === 'js-module-runtime' || type === 'js-module-threads' || String(type).startsWith('js-module') || type === 'configuration' || type === 'manifest') return defaultUri;
+      if (type === 'configuration') return bootUrl;
+      if (type === 'manifest') return defaultUri;
+      if (type === 'dotnetjs' || type === 'js-module-dotnet' || type === 'js-module-native' || type === 'js-module-runtime' || type === 'js-module-threads' || String(type).startsWith('js-module')) return defaultUri;
       const fname = name.split('/').pop();
       const gz = gzSet.has(fname) || gzSet.has(name);
       return (async () => {

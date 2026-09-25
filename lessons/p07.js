@@ -338,7 +338,7 @@ ${o.update || ''}            else    // Rectangle · Ellipse: 누른 곳(start)�
             Point last = stroke.Points[stroke.Points.Count - 1];
             if (Math.Abs(p.X - last.X) + Math.Abs(p.Y - last.Y) < 2) return;   // 너무 가까운 점은 건너뛴다
             // 점을 하나 더한 새 목록으로 바꿔 끼운다
-            // (실제 WPF 는 stroke.Points.Add(p) 만으로 다시 그려지지만, 브라우저 실행 창은 Points 를 새로 넣어야 바뀐다)
+            // (stroke.Points.Add(p) 만 써도 다시 그려진다 — 여기서는 새 컬렉션으로 바꾸는 방법도 보여 준다)
             PointCollection points = new PointCollection(stroke.Points);
             points.Add(p);
             stroke.Points = points;
@@ -850,7 +850,7 @@ namespace P07Step2
             if (current == null) return;
 
             // 점을 하나 더한 새 목록으로 바꿔 끼운다
-            // (실제 WPF 는 current.Points.Add(p) 만으로 다시 그려지지만, 브라우저 실행 창은 Points 를 새로 넣어야 바뀐다)
+            // (current.Points.Add(p) 만 써도 다시 그려진다 — 여기서는 새 컬렉션으로 바꾸는 방법도 보여 준다)
             PointCollection points = new PointCollection(current.Points);
             points.Add(p);
             current.Points = points;
@@ -2113,7 +2113,7 @@ private void Undo_CanExecute(object sender, CanExecuteRoutedEventArgs e)
           ], caption: '완성 프로그램의 구성 (MainWindow.xaml.cs 약 300줄)' },
           { type: 'code', title: '완성 프로그램. WPF 그림판', code: EX_FINAL, desc: '생성자는 명령을 등록하고 <code>LoadLines(SamplePicture)</code> 로 예시 그림을 그린 것이 전부입니다. 예시 그림의 해 · 구름 · 집 · 나무는 <code>ELLIPSE</code> · <code>RECT</code> · <code>LINE</code>, 지붕 · 풀밭 · 오른쪽 아래 낙서는 점 목록 <code>PEN</code> 입니다 — 파일 ▸ 저장 으로 만든 파일과 같은 형식이라, 반대로 내가 그린 그림을 저장한 파일의 내용을 이 배열에 붙여 넣으면 시작 그림이 바뀝니다. 예시 그림도 스택에 들어 있으므로 ↶ 를 누르면 나중에 그린 것(낙서)부터 하나씩 사라집니다. 명령의 <code>CanExecute</code> 는 WPF 가 입력이 있을 때마다 다시 물어보므로, 그리거나 취소한 직후 ↶ 버튼이 켜지고 꺼지는 것을 직접 관리하지 않아도 됩니다.' },
           { type: 'callout', kind: 'tip', title: '최종 점검 체크리스트', html: '<ul><li>☐ F1 빠르게 그어도 선이 끊기지 않고, 캔버스 밖으로 끌고 나가 떼도 “그리는 중” 이 남지 않는다</li><li>☐ F2 색 · 굵기를 바꾸면 <b>다음</b> 획부터 적용, 지금 색 표시가 바뀐다</li><li>☐ F3 네 방향으로 끌어도 사각형 · 원이 제대로, 놓으면 점선 → 실선</li><li>☐ F4 지우개로 칠한 뒤 ↶ → 지운 부분이 되살아난다</li><li>☐ F5 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 로 취소, 다 취소하면 ↶ 버튼이 꺼진다</li><li>☐ F6 모두 지우기는 [예] 일 때만</li><li>☐ F7 저장 → 모두 지우기 → 열기 = 같은 그림, 망가진 파일은 오류 창</li><li>☐ 클릭만 한 사각형은 남지 않는다</li></ul>' },
-          { type: 'callout', kind: 'info', title: '브라우저 실행 창에서', html: '<ul><li><kbd>Ctrl</kbd>+<kbd>Z</kbd> 는 실행 창을 한 번 클릭해 포커스를 준 뒤 누르세요.</li><li>브라우저 실행 창의 <code>CaptureMouse</code> 는 흉내만 냅니다. 캔버스 밖에서 버튼을 떼면 다음 움직임에서 <code>e.LeftButton</code> 검사로 마무리됩니다.</li><li>선 끝 모양(<code>StrokeEndLineCap</code>)은 시작 모양과 같게 그려집니다.</li></ul>' },
+          { type: 'callout', kind: 'info', title: '브라우저 실행 창에서', html: '<ul><li><kbd>Ctrl</kbd>+<kbd>Z</kbd> 는 실행 창을 한 번 클릭해 포커스를 준 뒤 누르세요.</li><li><code>CaptureMouse</code> 덕분에 그리는 도중 캔버스 밖으로 나가도 이동 · 놓기 이벤트가 캔버스로 옵니다. 그래도 창 밖에서 버튼을 떼는 경우를 대비해 <code>e.LeftButton</code> 검사를 함께 둡니다.</li></ul>' },
           { type: 'h', text: '2. 더 좋게 만들려면?' },
           { type: 'p', html: '저장 형식은 “다시 고칠 수 있는” 그림이지만, 친구에게 보내거나 문서에 붙이려면 <b>PNG 그림 파일</b>이 필요합니다. WPF 의 <code>RenderTargetBitmap</code> 은 화면의 요소를 그대로 비트맵(픽셀 그림)으로 “찍어” 주고, <code>PngBitmapEncoder</code> 가 그것을 PNG 파일로 씁니다. 브라우저 실행 환경에는 이 기능이 없어 아래 상자의 코드는 Visual Studio 에서만 시험할 수 있습니다.' },
           { type: 'callout', kind: 'vs', title: 'Visual Studio 에서 PNG 로 내보내기 (실제 WPF 전용)', html: '<p>파일 메뉴에 <code>&lt;MenuItem Header="PNG 로 내보내기..." Click="ExportPng_Click"/&gt;</code> 를 더하고, 코드 비하인드 맨 위에 <code>using System.Windows.Media.Imaging;</code> 을 쓴 뒤 아래 메서드를 클래스 안에 붙여 넣습니다.</p><pre><code>' + esc(PNG_EXPORT) + '</code></pre><ul><li><code>ActualWidth</code> · <code>ActualHeight</code> 는 화면에 실제로 그려진 캔버스의 크기입니다. 96 DPI 는 윈도우의 기본 해상도로, 192 로 주고 크기도 두 배로 하면 더 선명한 그림이 됩니다.</li><li>캔버스의 <code>Background="White"</code> 덕분에 PNG 의 배경도 흰색입니다. 배경을 지우면 투명한 PNG 가 됩니다.</li><li>캔버스가 창 안에서 여백(<code>Margin</code>)을 가지면 찍힌 그림이 어긋날 수 있습니다. 그럴 때는 캔버스를 <code>Border</code> 로 감싸고 Border 를 찍으세요.</li></ul>' },

@@ -305,7 +305,7 @@ namespace System.Windows
         public static readonly DependencyProperty MinHeightProperty = DependencyProperty.Register("MinHeight", typeof(double), typeof(FrameworkElement));
         public static readonly DependencyProperty CursorProperty = DependencyProperty.Register("Cursor", typeof(Cursor), typeof(FrameworkElement));
 
-        public string Name { get => Get("Name", ""); set { Set("Name", value); if (!string.IsNullOrEmpty(value)) RegisterName(value, this); } }
+        public string Name { get => Get("Name", ""); set { Set("Name", value); if (!string.IsNullOrEmpty(value)) RegisterGlobalName(value, this); } }
         public double Width { get => Get("Width", double.NaN); set => Set("Width", value); }
         public double Height { get => Get("Height", double.NaN); set => Set("Height", value); }
         public double MinWidth { get => Get("MinWidth", 0.0); set => Set("MinWidth", value); }
@@ -414,9 +414,18 @@ namespace System.Windows
         public void BringIntoView() { UiTree.Op("call", Id, "scrollIntoView"); }
 
         // ---------------------------------------------------------------- 이름 · 리소스
-        public static void RegisterName(string name, FrameworkElement el) { _names[name] = new WeakReference<FrameworkElement>(el); }
+        internal static void RegisterGlobalName(string name, FrameworkElement el) { _names[name] = new WeakReference<FrameworkElement>(el); }
+        /// <summary>이 요소의 이름 범위에 등록된 요소가 아닌 객체 (x:Name 을 붙인 변환 · 브러시 · 스토리보드 등)</summary>
+        internal Dictionary<string, object>? LocalNames;
+        public void RegisterName(string name, object scopedElement)
+        {
+            if (scopedElement is FrameworkElement fe) RegisterGlobalName(name, fe);
+            (LocalNames ??= new Dictionary<string, object>())[name] = scopedElement;
+        }
+        public void UnregisterName(string name) { LocalNames?.Remove(name); _names.Remove(name); }
         public object? FindName(string name)
         {
+            if (LocalNames != null && LocalNames.TryGetValue(name, out var lo)) return lo;
             foreach (var c in Descendants()) if (c.Name == name) return c;
             if (Name == name) return this;
             return _names.TryGetValue(name, out var w) && w.TryGetTarget(out var t) ? t : null;
@@ -445,7 +454,7 @@ namespace System.Windows
 
         protected override void OnPropertyChanged(string name, object? oldValue, object? newValue)
         {
-            if (name == "Name" && newValue is string s && s.Length > 0) RegisterName(s, this);
+            if (name == "Name" && newValue is string s && s.Length > 0) RegisterGlobalName(s, this);
         }
         public override string ToString() => GetType().Name + (Name.Length > 0 ? " " + Name : "");
     }

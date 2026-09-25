@@ -211,7 +211,8 @@ global using Console = CsRunner.Runtime.Console;
             }
             else tn = "object";
             fields.Append($"        internal {tn} {n};\n");
-            assigns.Append($"            {n} = ({tn})this.FindName(\"{n}\");\n");
+            // 변환 · 브러시처럼 요소가 아닌 객체는 XAML 읽기 중에 이미 채워졌으므로 null 로 덮어쓰지 않는다
+            assigns.Append($"            {n} = ({tn})this.FindName(\"{n}\") ?? {n};\n");
         }
         var body2 = isApp
             ? $@"

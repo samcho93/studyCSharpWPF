@@ -338,6 +338,8 @@ namespace System.Windows.Markup
                 if (obj is FrameworkElement fe) fe.Name = name;
                 else { var pi = obj.GetType().GetProperty("Name"); if (pi != null && pi.CanWrite && pi.PropertyType == typeof(string)) pi.SetValue(obj, name); }
                 // 실제 WPF 처럼 x:Name 필드를 요소를 만드는 즉시 채운다 — 읽는 도중 발생하는 이벤트(SelectionChanged 등)의 처리기에서 앞에 선언된 요소를 쓸 수 있다
+                // 요소가 아닌 객체(변환 · 브러시 · 스토리보드)는 루트의 이름 범위에 등록 → FindName · Storyboard.TargetName 이 찾는다
+                if (!(obj is FrameworkElement) && (Root ?? ScopeParent) is FrameworkElement scopeRoot) scopeRoot.RegisterName(name, obj);
                 if (Root != null && !ReferenceEquals(obj, Root))
                 {
                     var f = Root.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);

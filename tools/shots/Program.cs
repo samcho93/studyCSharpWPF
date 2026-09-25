@@ -99,7 +99,7 @@ void RunBatch(List<Item> items)
         entries[i] = (it, newNs + "." + cls);
     }
     File.WriteAllText(Path.Combine(dir, "ShotBatch.csproj"), Csproj("Exe", false), new UTF8Encoding(true));
-    File.WriteAllText(Path.Combine(dir, "__ShotBatch.cs"), BatchHost, new UTF8Encoding(true));
+    File.WriteAllText(Path.Combine(dir, "__ShotBatch.cs"), BatchHost(), new UTF8Encoding(true));
     // 빌드: 컴파일 오류가 난 예제는 빼고 다시 빌드
     for (int attempt = 0; attempt < 4 && entries.Count > 0; attempt++)
     {
@@ -236,7 +236,7 @@ static string Csproj(string outputType, bool appDefinition) => $@"<Project Sdk="
 </Project>";
 
 // 일괄 실행 프로그램: 창을 하나씩 띄우고 "SHOW id hwnd" 를 알린 뒤, 캡처가 끝났다는 "NEXT" 를 받으면 다음 창으로
-const string BatchHost = @"
+static string BatchHost() => @"
 internal static class __ShotBatch
 {
     [System.STAThread]

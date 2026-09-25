@@ -765,7 +765,7 @@ namespace Ch19ImplicitStyle
         }
     }
 }`, desc: '버튼과 체크 상자 어디에도 <code>Style</code> 을 적지 않았는데 보라색 스타일이 입혀졌습니다. <code>StackPanel.Resources</code> 에 둔 암시적 스타일의 범위는 <b>그 StackPanel 안</b>입니다. 두 번째 버튼은 FontSize 만 지역 값(12)이 이기고 나머지는 스타일을 따르며, 세 번째 버튼은 <code>Style="{x:Null}"</code> 로 스타일을 꺼서 기본 모양입니다.' },
-          { type: 'callout', kind: 'info', title: '이 강좌의 브라우저 실행기에서 암시적 스타일을 쓸 때', html: '실제 WPF 에서는 <code>Window.Resources</code> 에 둔 암시적 스타일이 창 안의 <b>모든</b> 버튼에 적용됩니다. 브라우저 실행기는 WPF 의 일부만 흉내 내므로, 암시적 스타일을 <b>① App.xaml</b> 에 두거나 <b>② 요소들을 바로 담고 있는 패널</b>(예제 19-4 의 StackPanel)의 <code>Resources</code> 에 두어야 정확히 보입니다. 이 장의 예제는 모두 이 방식으로 작성되어 있어 Visual Studio 에서도 똑같이 동작합니다.' },
+          { type: 'callout', kind: 'info', title: '암시적 스타일이 적용되는 범위', html: '암시적 스타일은 그 스타일을 담은 <code>Resources</code> 의 <b>주인 요소 안쪽 전체</b>에 적용됩니다. <code>Window.Resources</code> 에 두면 그 창의 모든 버튼, <b>App.xaml</b> 에 두면 프로그램의 모든 창, 패널의 <code>Resources</code> 에 두면 그 패널 안쪽만 바뀝니다. 필요한 만큼 좁은 곳에 두는 것이 좋은 습관입니다.' },
 
           { type: 'h', text: 'BasedOn — 스타일 물려받기' },
           { type: 'p', html: '앱에는 보통 “기본 버튼 · 강조 버튼 · 위험(삭제) 버튼”처럼 <b>비슷하지만 조금씩 다른</b> 스타일이 필요합니다. 크기 · 여백 · 글자색은 같고 배경색만 다르다면, 공통 부분을 <b>기본 스타일</b>에 한 번만 적고 나머지 스타일은 <code>BasedOn="{StaticResource 기본스타일}"</code> 으로 <b>물려받은 뒤 다른 부분만</b> 추가합니다. 클래스 상속(10장)과 같은 생각입니다.' },
@@ -1583,7 +1583,7 @@ namespace Ch19SharedTemplate
         }
     }
 }`, desc: '왼쪽에서 책을 고르고 <b>→</b> 를 누르면 오른쪽으로 옮겨집니다. 두 목록은 서로 다른 ListBox 지만 <code>BookTemplate</code> 하나를 함께 쓰므로 모양이 똑같습니다. 제목을 더 크게 하고 싶으면 템플릿 한 곳만 고치면 됩니다. <code>StringFormat={}{0}쪽</code> 의 <code>{}</code> 는 “뒤의 중괄호는 마크업 확장이 아니다”라는 표시입니다(18장).' },
-          { type: 'callout', kind: 'tip', title: '브라우저 실행기에서 DataTemplate 을 쓸 때', html: 'DataTemplate 안의 요소에서 <code>{StaticResource …}</code> 로 <b>Window.Resources</b> 의 브러시를 참조하면 브라우저 실행기에서는 찾지 못할 수 있습니다. 템플릿 안에서는 예제처럼 색을 직접 적거나, 템플릿이 쓰는 리소스를 <b>App.xaml</b> 에 두세요. (Visual Studio 에서는 둘 다 동작합니다.)' },
+          { type: 'callout', kind: 'tip', title: '템플릿 안에서 리소스 쓰기', html: 'DataTemplate 안의 요소에서도 <code>{StaticResource …}</code> 로 <b>Window.Resources</b> 나 <b>App.xaml</b> 의 브러시 · 스타일을 쓸 수 있습니다. 여러 템플릿이 같은 색을 쓴다면 리소스로 한 번 정의해 두세요. 단, <code>StaticResource</code> 는 <b>사용하는 곳보다 앞(위)</b>에 정의되어 있어야 합니다.' },
           { type: 'h', text: 'DataType — 형식만 맞으면 자동으로 적용' },
           { type: 'p', html: 'DataTemplate 에 <code>x:Key</code> 대신 <code>DataType="{x:Type local:Student}"</code> 을 적으면, <b>그 형식의 객체를 화면에 보여 줄 때마다 자동으로</b> 이 템플릿이 쓰입니다. 암시적 스타일의 데이터 버전이라고 생각하면 됩니다. ListBox 의 항목이든, ContentControl 의 <code>Content</code> 든, Button 의 <code>Content</code> 든 Student 객체가 들어가면 같은 모양입니다. <code>local:</code> 접두사는 Window/Application 태그에 <code>xmlns:local="clr-namespace:내네임스페이스"</code> 로 선언합니다.' },
           { type: 'code', title: '예제 19-11. DataType 으로 자동 적용 — App.xaml 의 Student 템플릿', code: `// ===== File: App.xaml =====

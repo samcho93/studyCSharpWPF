@@ -656,12 +656,17 @@
     });
     n.classList.toggle('nolines', p.GridLinesVisibility === 'None');
   }
+  // SVG 는 선 끝 모양이 하나뿐 → 시작 · 끝 중 둥근/사각 모양이 있으면 그것을 쓴다
+  function capCss(a, b) {
+    const c = [String(a || 'Flat').toLowerCase(), String(b || 'Flat').toLowerCase()];
+    return c.includes('round') ? 'round' : c.includes('square') ? 'square' : 'butt';
+  }
   function paintShape(el, n) {
     const p = el.props, t = el.type;
     const fill = p.Fill || 'none', stroke = p.Stroke || 'none', sw = num(p.StrokeThickness, 1);
     const W = num(p.Width, NaN), H = num(p.Height, NaN);
     const dash = p.StrokeDashArray ? String(p.StrokeDashArray).split(' ').map((d) => +d * sw).join(' ') : '';
-    const common = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash ? ` stroke-dasharray="${dash}"` : ''} stroke-linecap="${(p.StrokeStartLineCap || 'flat').toLowerCase() === 'round' ? 'round' : 'butt'}" stroke-linejoin="${(p.StrokeLineJoin || 'miter').toLowerCase()}"`;
+    const common = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash ? ` stroke-dasharray="${dash}"` : ''} stroke-linecap="${capCss(p.StrokeStartLineCap, p.StrokeEndLineCap)}" stroke-linejoin="${(p.StrokeLineJoin || 'miter').toLowerCase()}"`;
     let inner = '', w = W, h = H, view = '';
     const half = sw / 2;
     if (t === 'Rectangle') inner = `<rect x="${half}" y="${half}" width="calc(100% - ${sw}px)" height="calc(100% - ${sw}px)" rx="${num(p.RadiusX, 0)}" ry="${num(p.RadiusY, 0)}" ${common}/>`;

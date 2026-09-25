@@ -6,7 +6,7 @@
  *  - 중지: 워커 종료 (무한 반복도 즉시 멈춤). 다음 실행을 위해 새 워커를 미리 준비한다
  */
 (function () {
-  const VERSION = '20260925';
+  const VERSION = '20260926';
   const enc = new TextEncoder();
   const BASE = new URL('runtime/cs/', location.href).href;
 
