@@ -66,6 +66,20 @@ internal static class __Entry
     }}
 }}", new UTF8Encoding(true));
         }
+        // 진단: 처리되지 않은 예외를 파일로 남긴다 (창이 뜨지 않고 종료될 때 원인 보고)
+        File.WriteAllText(Path.Combine(dir, "__ShotDiag.cs"), @"
+internal static class __ShotDiag
+{
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Init()
+    {
+        System.AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            try { System.IO.File.WriteAllText(System.IO.Path.Combine(System.AppContext.BaseDirectory, ""shot-error.txt""), e.ExceptionObject.ToString()); } catch { }
+        };
+    }
+}", new UTF8Encoding(true));
+        var errFile = Path.Combine(dir, "bin", "Release", "net9.0-windows", "shot-error.txt");
         var hasStartupUri = hasApp && files.Any(f => f.name.Equals("App.xaml", StringComparison.OrdinalIgnoreCase) && f.text.Contains("StartupUri"));
         File.WriteAllText(Path.Combine(dir, "ShotApp.csproj"), $@"<Project Sdk=""Microsoft.NET.Sdk"">
   <PropertyGroup>
@@ -98,7 +112,14 @@ internal static class __Entry
             hwnd = FindMainWindow(proc.Id);
             if (hwnd != IntPtr.Zero) break;
         }
-        if (hwnd == IntPtr.Zero) { if (!proc.HasExited) proc.Kill(); throw new Exception(proc.HasExited ? "프로그램이 창을 띄우지 않고 종료됨 (예외?)" : "창을 찾지 못함"); }
+        if (hwnd == IntPtr.Zero)
+        {
+            if (!proc.HasExited) proc.Kill();
+            var why = "";
+            var ef = Path.Combine(Path.GetDirectoryName(exe)!, "shot-error.txt");
+            if (File.Exists(ef)) why = "\n" + Trim(File.ReadAllText(ef), 8);
+            throw new Exception((proc.HasExited ? $"프로그램이 창을 띄우지 않고 종료됨 (종료 코드 {proc.ExitCode})" : "창을 찾지 못함") + why);
+        }
         Thread.Sleep(delay);
         SetForegroundWindow(hwnd);
         Thread.Sleep(150);

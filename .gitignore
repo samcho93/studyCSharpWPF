@@ -11,6 +11,11 @@ tools/shots/obj/
 tools/shots/work/
 tools/.build/
 
+# 예제 실행이 루트에 만든 파일 (검증기는 임시 폴더에서 실행하지만 혹시 모를 경우 대비)
+/*.txt
+/*.csv
+/*.dat
+
 # 에디터 · OS
 .vscode/
 .idea/

@@ -109,9 +109,12 @@ function runValidator(codes) {
   fs.writeFileSync(inFile, JSON.stringify(codes.map((c, i) => ({ id: String(i), code: c.code, stdin: c.stdin || '', compileOnly: !!c.compileOnly || !!c.fragment }))));
   // 미리 빌드된 실행 파일이 있으면 그대로 쓴다 (여러 검증을 동시에 돌려도 빌드가 충돌하지 않게) — 없으면 dotnet run 으로 빌드
   const exe = path.join(ROOT, 'tools/validator/bin/Release/net9.0', process.platform === 'win32' ? 'Validator.exe' : 'Validator');
+  // 예제가 만드는 파일(File.WriteAllText 등)이 저장소를 더럽히지 않도록 임시 작업 폴더에서 실행한다
+  const work = path.join(tmp, 'work');
+  fs.mkdirSync(work, { recursive: true });
   const r = fs.existsSync(exe)
-    ? spawnSync(exe, [inFile, outFile], { encoding: 'utf8', maxBuffer: 1 << 28 })
-    : spawnSync('dotnet', ['run', '--project', path.join(ROOT, 'tools/validator'), '-c', 'Release', '--', inFile, outFile], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    ? spawnSync(exe, [inFile, outFile], { encoding: 'utf8', maxBuffer: 1 << 28, cwd: work })
+    : spawnSync('dotnet', ['run', '--project', path.join(ROOT, 'tools/validator'), '-c', 'Release', '--', inFile, outFile], { encoding: 'utf8', maxBuffer: 1 << 28, cwd: work });
   if (r.status !== 0) { console.error(r.stdout, r.stderr); throw new Error('validator 실행 실패'); }
   const res = JSON.parse(fs.readFileSync(outFile, 'utf8'));
   fs.rmSync(tmp, { recursive: true, force: true });
