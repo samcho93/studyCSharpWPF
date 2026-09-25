@@ -1,0 +1,21 @@
+# 빌드 산출물
+tools/runner/bin/
+tools/runner/obj/
+tools/runner/publish/
+tools/wpfshim/bin/
+tools/wpfshim/obj/
+tools/validator/bin/
+tools/validator/obj/
+tools/shots/bin/
+tools/shots/obj/
+tools/shots/work/
+tools/.build/
+
+# 에디터 · OS
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+.DS_Store
+node_modules/
+*.user

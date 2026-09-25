@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WPF 예제 실행 화면 캡처 도구 (Windows 전용)
+       node tools/shots.mjs 가 lessons/*.js 에서 WPF 예제를 뽑아 JSON 으로 넘기면,
+       각 예제를 실제 WPF 프로젝트로 빌드 · 실행하고 창을 PNG 로 캡처해 assets/shots/ 에 저장한다. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+</Project>

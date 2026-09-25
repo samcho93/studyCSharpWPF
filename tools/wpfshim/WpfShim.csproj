@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 브라우저용 실행 라이브러리: 콘솔 대체 클래스 + WPF 호환 API(System.Windows.*) 의 웹 구현.
+       사용자 코드는 이 어셈블리(WpfShim.dll)를 참조해 컴파일되고, 화면은 브라우저(DOM)에 그려진다. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>WpfShim</AssemblyName>
+    <RootNamespace>WpfShim</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591;CS0067;CS8618;CS0108;CS0109;IL2026;IL2070;IL2072;IL2075;IL2057;IL2067</NoWarn>
+    <IsTrimmable>false</IsTrimmable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

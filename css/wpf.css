@@ -1,0 +1,242 @@
+/* ===================================================================
+   WPF 창 렌더링 (브라우저 안의 "윈도우 데스크톱") + 강좌의 실행 화면 캡처 스타일
+   =================================================================== */
+:root { --wpf-h: 46%; }
+
+/* 오른쪽 패널: WPF 영역(위) + 콘솔(아래) */
+.wpf-host { display: none; flex: none; height: var(--wpf-h); min-height: 160px; flex-direction: column; background: #e9edf2; border-bottom: 1px solid #262c36; }
+.wpf-gutter { display: none; }
+body.wpf-active .wpf-host { display: flex; }
+body.wpf-active .wpf-gutter { display: block; background: #262c36; opacity: 1; }
+.wpf-bar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: #1b2230; color: #d7dde8; font-size: 12.5px; font-family: var(--sans); border-bottom: 1px solid #2b3340; }
+.wpf-bar-title { font-weight: 700; }
+.wpf-bar .btn { background: transparent; color: #c9d1d9; border-color: #30363d; }
+.wpf-desktop {
+  position: relative; flex: 1; min-height: 0; overflow: auto; font-family: "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif; font-size: 12px; color: #000;
+  background: #dfe6ee radial-gradient(circle at 30% 20%, rgba(255, 255, 255, .35), transparent 55%), linear-gradient(160deg, #b9d2ea 0%, #dfe6ee 45%, #c8d8e8 100%);
+  background-blend-mode: normal;
+}
+.wpf-desktop * { box-sizing: border-box; }
+.wpf-taskbar { position: sticky; bottom: 0; left: 0; right: 0; height: 30px; margin-top: auto; background: rgba(32, 38, 48, .92); display: flex; align-items: center; gap: 4px; padding: 0 8px; z-index: 900; }
+.wpf-task { border: 1px solid transparent; background: transparent; color: #e7ecf3; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; padding: 3px 10px; border-radius: 4px; cursor: pointer; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpf-task.on { background: rgba(255, 255, 255, .18); border-bottom: 2px solid #5aa9f5; }
+.wpf-task.min { opacity: .7; }
+
+/* 크게 보기: 화면 전체 오버레이 */
+body.wpf-zoom .output { position: fixed; inset: 0; z-index: 800; width: auto !important; }
+body.wpf-zoom .wpf-host { height: 72vh; }
+body.wpf-zoom .layout { grid-template-columns: var(--nav-w) 5px minmax(360px, 1fr) 5px 0; }
+
+/* ---------------------------------------------------------------- 창 */
+.wpf-win {
+  position: absolute; display: flex; flex-direction: column; background: #fff; border: 1px solid #a0a0a0; border-radius: 8px 8px 6px 6px; overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .28), 0 0 0 1px rgba(255, 255, 255, .4) inset; color: #000; font-size: 12px; outline: none;
+}
+.wpf-win.active { border-color: #6b6b6b; box-shadow: 0 16px 48px rgba(0, 0, 0, .38); }
+.wpf-win.wpf-max { border-radius: 0; }
+.wpf-win.wpf-blocked::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, .35); cursor: not-allowed; z-index: 50; }
+.wpf-title { display: flex; align-items: center; height: 31px; padding: 0 0 0 10px; background: #fff; color: #000; user-select: none; cursor: default; border-bottom: 1px solid #ececec; flex: none; }
+.wpf-win:not(.active) .wpf-title { color: #999; }
+.wpf-ico { font-size: 11px; color: #3b7dd8; margin-right: 8px; }
+.wpf-title-text { flex: 1; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wpf-title-btns { display: flex; height: 100%; }
+.wpf-title-btns button { width: 46px; height: 100%; border: none; background: transparent; color: #333; font-size: 12px; cursor: pointer; font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
+.wpf-title-btns button:hover { background: #e5e5e5; }
+.wpf-title-btns button[data-w="close"]:hover { background: #e81123; color: #fff; }
+.wpf-title-btns button:disabled { color: #bbb; cursor: default; background: transparent !important; }
+.wpf-toolwin .wpf-title { height: 24px; }
+.wpf-toolwin .wpf-title-btns button { width: 30px; }
+.wpf-client { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #fff; }
+.wpf-client > .wpf-el { flex: 1 1 auto; min-height: 0; }
+
+/* ---------------------------------------------------------------- 공통 요소 */
+.wpf-el { font-family: "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif; font-size: 12px; box-sizing: border-box; min-width: 0; min-height: 0; }
+.wpf-disabled { color: #838383 !important; }
+.wpf-content-text { white-space: pre; }
+.hc-center { text-align: center; justify-content: center; }
+.hc-right { text-align: right; justify-content: flex-end; }
+.hc-left { text-align: left; justify-content: flex-start; }
+.vc-center { align-items: center; }
+.vc-bottom { align-items: flex-end; }
+.vc-top { align-items: flex-start; }
+
+.wpf-grid { display: grid; min-width: 0; min-height: 0; }
+.wpf-grid.wpf-gridlines { background-image: linear-gradient(#3b78e7 1px, transparent 1px), linear-gradient(90deg, #3b78e7 1px, transparent 1px); background-size: 100% 100%; outline: 1px dashed #3b78e7; outline-offset: -1px; }
+.wpf-grid.wpf-gridlines > .wpf-el { outline: 1px dashed rgba(59, 120, 231, .6); outline-offset: -1px; }
+.wpf-stackpanel, .wpf-virtualizingstackpanel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wpf-wrappanel { display: flex; flex-wrap: wrap; align-content: flex-start; }
+.wpf-dockpanel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wpf-canvas { position: relative; overflow: visible; }
+.wpf-uniformgrid { display: grid; }
+.wpf-border { display: flex; flex-direction: column; overflow: hidden; }
+.wpf-viewbox { display: flex; overflow: hidden; }
+.wpf-scrollviewer { overflow: auto; display: flex; flex-direction: column; }
+.wpf-usercontrol, .wpf-contentcontrol, .wpf-contentpresenter, .wpf-page, .wpf-frame, .wpf-datagridrow { display: flex; flex-direction: column; }
+.wpf-separator { height: 1px; background: #d5d5d5; margin: 4px 2px; }
+.wpf-menu .wpf-separator { height: 1px; margin: 3px 2px; }
+
+/* 텍스트 */
+.wpf-textblock { white-space: pre; line-height: 1.35; }
+.wpf-label { display: flex; align-items: flex-start; padding: 5px; white-space: pre; line-height: 1.35; }
+.wpf-label > .wpf-el { flex: 1 1 auto; }
+
+/* 버튼 */
+.wpf-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 1px 10px; min-height: 23px;
+  background: #dddddd; border: 1px solid #707070; color: #000; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; cursor: default; border-radius: 0; line-height: 1.3; white-space: pre;
+}
+.wpf-button:hover:not(:disabled) { background: #bee6fd; border-color: #3c7fb1; }
+.wpf-button:active:not(:disabled) { background: #c4e5f6; border-color: #2c628b; }
+.wpf-button.wpf-default { border-color: #3399ff; }
+.wpf-button:focus-visible { outline: 1px dotted #000; outline-offset: -3px; }
+.wpf-button:disabled { background: #f4f4f4; border-color: #adb2b5; color: #838383; }
+.wpf-togglebutton.on { background: #c4e5f6; border-color: #2c628b; }
+.wpf-button > .wpf-el { flex: none; }
+
+/* 입력 */
+.wpf-textbox {
+  display: block; padding: 1px 2px; min-height: 23px; background: #fff; border: 1px solid #abadb3; color: #000; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; border-radius: 0; outline: none; resize: none; width: auto;
+}
+.wpf-textbox:hover { border-color: #7eb4ea; }
+.wpf-textbox:focus { border-color: #569de5; }
+.wpf-textbox:read-only { background: #f4f4f4; }
+.wpf-textbox:disabled { background: #f4f4f4; color: #838383; }
+textarea.wpf-textbox { min-height: 23px; line-height: 1.35; }
+.wpf-date { padding: 0 2px; }
+.wpf-check, .wpf-radio { display: inline-flex; align-items: center; gap: 4px; cursor: default; white-space: pre; line-height: 1.35; }
+.wpf-check input, .wpf-radio input { margin: 0 2px 0 0; width: 13px; height: 13px; accent-color: #0078d7; }
+.wpf-cnt { display: inline-flex; align-items: center; }
+.wpf-slider { width: auto; min-width: 80px; height: 22px; accent-color: #0078d7; margin: 0; }
+.wpf-slider.vertical { writing-mode: vertical-lr; direction: rtl; width: 22px; min-width: 22px; min-height: 80px; }
+.wpf-progress { position: relative; min-height: 14px; background: #e6e6e6; border: 1px solid #bcbcbc; overflow: hidden; }
+.wpf-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #06b025; transition: width .15s; }
+.wpf-progress.indet .wpf-progress-fill { animation: wpfIndet 1.6s linear infinite; }
+@keyframes wpfIndet { from { left: -30%; } to { left: 100%; } }
+.wpf-progress.vertical { min-width: 14px; }
+.wpf-progress.vertical .wpf-progress-fill { left: 0; right: 0; top: auto; width: 100% !important; height: 50%; }
+.wpf-combo { display: flex; min-height: 23px; }
+.wpf-select { width: 100%; min-height: 22px; background: #f0f0f0; border: 1px solid #acacac; color: #000; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; border-radius: 0; padding: 0 2px; outline: none; }
+.wpf-select:hover { background: #ecf4fc; border-color: #7eb4ea; }
+.wpf-combo-input { width: 100%; }
+.wpf-image { display: block; object-fit: contain; max-width: 100%; }
+
+/* 목록 */
+.wpf-listbox { display: flex; flex-direction: column; overflow: auto; background: #fff; border: 1px solid #abadb3; padding: 1px; }
+.wpf-listboxitem, .wpf-comboboxitem, .wpf-listviewitem { display: flex; align-items: center; padding: 1px 4px; min-height: 18px; white-space: pre; cursor: default; flex: none; }
+.wpf-listboxitem:hover, .wpf-listviewitem:hover { background: #e5f3fb; }
+.wpf-listboxitem.sel, .wpf-listviewitem.sel { background: #0078d7; color: #fff; }
+.wpf-listboxitem.sel .wpf-textblock, .wpf-listviewitem.sel .wpf-textblock { color: inherit; }
+.wpf-listbox:not(:focus-within) .wpf-listboxitem.sel { background: #d9d9d9; color: #000; }
+.wpf-listbox:not(:focus-within) .wpf-listboxitem.sel .wpf-textblock { color: inherit; }
+.wpf-gridview { padding: 0; display: block; }
+.wpf-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.wpf-table th { text-align: left; font-weight: 400; padding: 3px 6px; background: #fff; border-right: 1px solid #e0e0e0; border-bottom: 1px solid #d0d0d0; position: sticky; top: 0; white-space: nowrap; }
+.wpf-table th:hover { background: #e5f3fb; }
+.wpf-table td { padding: 2px 6px; border-right: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+.wpf-gridview.nolines .wpf-table td { border-color: transparent; }
+.wpf-table tbody tr:hover td { background: #e5f3fb; }
+.wpf-table tbody tr.sel td { background: #0078d7; color: #fff; }
+.wpf-table tr.newrow td { height: 22px; }
+.wpf-cell-edit { width: 100%; border: 1px solid #569de5; font: inherit; padding: 0 2px; outline: none; }
+
+/* 탭 · 그룹 · 확장 */
+.wpf-tabs { display: flex; flex-direction: column; min-height: 0; }
+.wpf-tabs.bottom { flex-direction: column-reverse; }
+.wpf-tabs-hdr { display: flex; gap: 0; align-items: flex-end; flex: none; padding: 2px 2px 0; }
+.wpf-tab { padding: 3px 8px; min-height: 22px; background: #f0f0f0; border: 1px solid #d9d9d9; border-bottom: none; color: #000; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; cursor: default; margin-bottom: -1px; }
+.wpf-tab:hover { background: #ecf4fc; }
+.wpf-tab.on { background: #fff; border-color: #d9d9d9; padding-bottom: 5px; position: relative; z-index: 1; }
+.wpf-tabs-body { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #d9d9d9; margin: 0 2px 2px; }
+.wpf-tabitem { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: auto; }
+.wpf-groupbox { position: relative; display: flex; flex-direction: column; border: 1px solid #d5dfe5; border-radius: 4px; margin-top: 8px; padding: 10px 6px 6px; }
+.wpf-gb-hdr { position: absolute; top: -9px; left: 8px; background: #fff; padding: 0 4px; font-size: 12px; line-height: 1.3; }
+.wpf-gb-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.wpf-expander { display: flex; flex-direction: column; }
+.wpf-exp-hdr { display: flex; align-items: center; gap: 6px; padding: 3px 4px; cursor: default; user-select: none; }
+.wpf-exp-arrow { font-size: 9px; width: 14px; text-align: center; color: #555; }
+.wpf-exp-body { display: none; flex-direction: column; padding-left: 4px; }
+.wpf-expander.open .wpf-exp-body { display: flex; }
+.wpf-treeview { display: flex; flex-direction: column; overflow: auto; background: #fff; border: 1px solid #abadb3; padding: 2px; }
+.wpf-tvi { display: flex; flex-direction: column; }
+.wpf-tvi-hdr { display: flex; align-items: center; gap: 2px; padding: 1px 2px; white-space: pre; }
+.wpf-tvi-arrow { width: 16px; text-align: center; font-size: 10px; color: #444; cursor: default; }
+.wpf-tvi-txt { padding: 1px 4px; }
+.wpf-tvi.sel > .wpf-tvi-hdr > .wpf-tvi-txt { background: #0078d7; color: #fff; }
+.wpf-tvi-kids { display: none; flex-direction: column; padding-left: 16px; }
+.wpf-tvi.open > .wpf-tvi-kids { display: flex; }
+.wpf-statusbar { display: flex; align-items: center; gap: 0; background: #f0f0f0; border-top: 1px solid #d5d5d5; min-height: 23px; padding: 0 2px; }
+.wpf-statusbaritem { display: flex; align-items: center; padding: 2px 6px; }
+.wpf-toolbar { display: flex; align-items: center; gap: 2px; background: #eeeef2; border-bottom: 1px solid #d5d5d5; min-height: 26px; padding: 2px 4px; }
+.wpf-toolbar .wpf-button { background: transparent; border-color: transparent; }
+.wpf-toolbar .wpf-button:hover { background: #c9def5; border-color: #3399ff; }
+.wpf-toolbartray { display: flex; flex-direction: column; }
+
+/* 메뉴 */
+.wpf-menu { display: flex; align-items: stretch; list-style: none; margin: 0; padding: 0; background: #f0f0f0; min-height: 20px; position: relative; z-index: 20; }
+.wpf-mi { position: relative; list-style: none; }
+.wpf-mi-hdr { display: flex; align-items: center; gap: 4px; padding: 2px 8px; white-space: pre; cursor: default; }
+.wpf-menu > .wpf-mi > .wpf-mi-hdr { height: 100%; }
+.wpf-menu > .wpf-mi:hover > .wpf-mi-hdr, .wpf-menu > .wpf-mi.open > .wpf-mi-hdr { background: #d5e6f7; outline: 1px solid #a8c9ee; outline-offset: -1px; }
+.wpf-mi-ico { width: 16px; display: inline-block; text-align: center; font-size: 11px; }
+.wpf-menu > .wpf-mi > .wpf-mi-hdr > .wpf-mi-ico:empty, .wpf-menu > .wpf-mi > .wpf-mi-hdr > .wpf-mi-gst, .wpf-menu > .wpf-mi > .wpf-mi-hdr > .wpf-mi-arrow { display: none; }
+.wpf-submenu { display: none; position: absolute; left: 0; top: 100%; min-width: 150px; margin: 0; padding: 2px; list-style: none; background: #f2f2f2; border: 1px solid #979797; box-shadow: 3px 3px 6px rgba(0, 0, 0, .25); z-index: 30; }
+.wpf-mi.open > .wpf-submenu { display: block; }
+.wpf-submenu .wpf-mi > .wpf-mi-hdr { padding: 3px 24px 3px 4px; }
+.wpf-submenu .wpf-mi:hover > .wpf-mi-hdr, .wpf-submenu .wpf-mi.open > .wpf-mi-hdr { background: #dbe8f8; outline: 1px solid #a8c9ee; outline-offset: -1px; }
+.wpf-submenu .wpf-mi-txt { flex: 1; }
+.wpf-mi-gst { color: #6d6d6d; margin-left: 24px; font-size: 11px; }
+.wpf-submenu .wpf-submenu { left: 100%; top: -3px; }
+.wpf-mi.has-sub > .wpf-mi-hdr > .wpf-mi-arrow::after { content: '▸'; font-size: 10px; margin-left: 6px; }
+.wpf-menu > .wpf-mi.has-sub > .wpf-mi-hdr > .wpf-mi-arrow::after { content: ''; }
+.wpf-mi.wpf-disabled > .wpf-mi-hdr { color: #838383; }
+.wpf-mi.checked > .wpf-mi-hdr > .wpf-mi-ico { background: #dbe8f8; border: 1px solid #a8c9ee; border-radius: 2px; }
+.wpf-ctxmenu { display: none; position: absolute; flex-direction: column; min-width: 150px; padding: 2px; background: #f2f2f2; border: 1px solid #979797; box-shadow: 3px 3px 6px rgba(0, 0, 0, .25); z-index: 950; }
+.wpf-ctxmenu.open { display: flex; }
+.wpf-ctxmenu > .wpf-mi > .wpf-mi-hdr { padding: 3px 24px 3px 4px; }
+.wpf-ctxmenu > .wpf-mi:hover > .wpf-mi-hdr { background: #dbe8f8; }
+.wpf-ctxmenu > .wpf-mi > .wpf-mi-hdr > .wpf-mi-gst { display: inline; }
+
+/* 도형 */
+.wpf-shape { display: block; overflow: visible; }
+.wpf-shape svg { display: block; }
+
+/* ---------------------------------------------------------------- 메시지 박스 · 파일 대화상자 */
+.wpf-modal { position: absolute; inset: 0; z-index: 990; background: rgba(0, 0, 0, .12); display: grid; place-items: center; font-family: "Segoe UI", "Malgun Gothic", sans-serif; font-size: 12px; color: #000; }
+.wpf-mbox { min-width: 300px; max-width: 80%; background: #fff; border: 1px solid #707070; box-shadow: 0 10px 40px rgba(0, 0, 0, .35); display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; }
+.wpf-mbox .wpf-title { cursor: default; }
+.wpf-mbox-body { display: flex; gap: 14px; padding: 18px 20px 24px; align-items: flex-start; }
+.wpf-mbox-icon { font-size: 28px; line-height: 1; }
+.wpf-mbox-text { white-space: pre-wrap; line-height: 1.5; flex: 1; padding-top: 4px; }
+.wpf-mbox-btns { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; background: #f0f0f0; border-top: 1px solid #dfdfdf; }
+.wpf-mbox-btns button { min-width: 75px; height: 24px; background: #e1e1e1; border: 1px solid #adadad; font: 12px "Segoe UI", "Malgun Gothic", sans-serif; cursor: default; color: #000; }
+.wpf-mbox-btns button:hover { background: #e5f1fb; border-color: #0078d7; }
+.wpf-mbox-btns button.default { border-color: #0078d7; box-shadow: 0 0 0 1px #0078d7 inset; }
+.wpf-fdlg { width: 460px; }
+.wpf-fdlg-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.wpf-fdlg-path { font-size: 12px; }
+.wpf-fdlg-path .muted { color: #777; }
+.wpf-fdlg-list { height: 150px; overflow: auto; background: #fff; border: 1px solid #abadb3; padding: 2px; }
+.wpf-fdlg-file { padding: 2px 6px; cursor: default; }
+.wpf-fdlg-file:hover { background: #e5f3fb; }
+.wpf-fdlg-file.sel { background: #cce8ff; }
+.wpf-fdlg-row { display: grid; grid-template-columns: auto 1fr 150px; gap: 8px; align-items: center; }
+
+/* ---------------------------------------------------------------- 강좌 문서: Visual Studio 실행 화면 캡처 */
+.shot-box { margin: 10px 0 0; padding: 10px 14px 8px; background: var(--card); border-top: 1px solid var(--line); text-align: center; }
+.shot-box.standalone { margin: 16px 0; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.shot-box img.shot { max-width: 100%; max-height: 420px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(20, 30, 50, .18); cursor: zoom-in; background: #fff; }
+.shot-box figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.callout img.shot { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; cursor: zoom-in; }
+.callout.vs { border-left-color: #68217a; background: color-mix(in srgb, #68217a 8%, var(--card)); }
+.callout.vs .ct { color: #68217a; }
+:root[data-theme="dark"] .callout.vs .ct { color: #d9a3e8; }
+.code-head .tag.wpf { color: #fff; background: #68217a; }
+.code-block.wpf { border-color: color-mix(in srgb, #68217a 40%, var(--line)); }
+
+/* 슬라이드 안 실행 화면 */
+.s-shot { display: flex; align-items: center; justify-content: center; height: 100%; }
+.s-shot img { max-width: 100%; max-height: 100%; border: 1px solid var(--s-line); border-radius: .6cqw; box-shadow: 0 .8cqw 2.4cqw rgba(0, 0, 0, .2); }
+.s-code.has-shot { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.s-code .s-side-shot { display: flex; flex-direction: column; gap: .6cqw; min-height: 0; }
+.s-code .s-side-shot img { max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--s-line); border-radius: .6cqw; box-shadow: 0 .6cqw 1.8cqw rgba(0, 0, 0, .18); align-self: center; }
+.s-code .s-side-shot .cap { font-size: 1.15cqw; color: var(--s-muted); text-align: center; }

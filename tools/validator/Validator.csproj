@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 강좌 콘텐츠 검증기: 브라우저와 같은 방식(Roslyn + WpfShim)으로 예제를 컴파일·실행해 expect 를 비교한다.
+       node tools/validate.mjs 가 lessons/*.js 에서 코드를 뽑아 JSON 으로 넘기고 이 프로그램이 결과 JSON 을 돌려준다. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Validator</RootNamespace>
+    <NoWarn>$(NoWarn);CS8632;CA1416</NoWarn>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\wpfshim\WpfShim.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 브라우저 컴파일러와 같은 코드 생성 로직을 공유한다 -->
+    <Compile Include="..\runner\Compiler.cs" Link="Compiler.cs" />
+  </ItemGroup>
+</Project>

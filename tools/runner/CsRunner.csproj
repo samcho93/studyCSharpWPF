@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <!-- 브라우저 C# 실행 엔진: Roslyn 으로 컴파일하고 .NET(mono) WebAssembly 런타임에서 실행한다.
+       Blazor 의 UI 부분은 쓰지 않고, 런타임(dotnet.js)만 웹 워커에서 직접 띄운다. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>CsRunner</RootNamespace>
+    <AssemblyName>CsRunner</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <!-- 사용자 코드가 어떤 BCL 기능을 쓸지 모르므로 트리밍하지 않는다 -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <!-- Roslyn 이 참조 어셈블리로 읽을 수 있도록 webcil 대신 일반 .dll 로 배포 -->
+    <WasmEnableWebcil>false</WasmEnableWebcil>
+    <!-- .br/.gz 는 우리 빌드 스크립트가 따로 만든다 -->
+    <CompressionEnabled>false</CompressionEnabled>
+    <BlazorEnableCompression>false</BlazorEnableCompression>
+    <WasmBuildNative>false</WasmBuildNative>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <BlazorWebAssemblyLoadAllGlobalizationData>false</BlazorWebAssemblyLoadAllGlobalizationData>
+    <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
+    <NoWarn>$(NoWarn);CS8632;IL2026;IL2072;IL2075;IL2070</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\wpfshim\WpfShim.csproj" />
+  </ItemGroup>
+</Project>
