@@ -182,6 +182,12 @@
     const cur = parseFloat(getComputedStyle(root).getPropertyValue('--out-w')) || 430;
     const want = Math.min(window.innerWidth * 0.6, Math.max(cur, w + 60));
     if (want > cur + 10 && window.innerWidth > 900) { root.style.setProperty('--out-w', want + 'px'); app.deck && app.deck.fit(); app.editor.refresh(); }
+    // 창이 WPF 영역보다 크면 영역을 키운다 (콘솔 패널의 80% 까지)
+    const panel = $('consolePanel').getBoundingClientRect().height;
+    const host = $('wpfHost');
+    const curH = host ? host.getBoundingClientRect().height : 0;
+    const wantH = Math.min(panel * 0.8, h + 80);
+    if (host && wantH > curH + 10) root.style.setProperty('--wpf-h', Math.round(wantH) + 'px');
   };
 
   app.toast = function (msg) {

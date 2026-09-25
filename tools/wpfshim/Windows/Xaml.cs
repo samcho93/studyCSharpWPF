@@ -87,8 +87,8 @@ namespace System.Windows.Markup
             string ns = NsPresentation;
             if (el != null)
             {
-                var xn = el.GetNamespaceOfPrefix(prefix);
-                if (xn != null) ns = xn.NamespaceName;
+                var xn = prefix.Length == 0 ? el.GetDefaultNamespace() : el.GetNamespaceOfPrefix(prefix);
+                if (xn != null && xn.NamespaceName.Length > 0) ns = xn.NamespaceName;
             }
             var t = Resolve(ns, name);
             if (t == null && Bridge.UserAssembly != null) foreach (var ut in Bridge.UserAssembly.GetTypes()) if (ut.Name == name) return ut;
@@ -384,9 +384,12 @@ namespace System.Windows.Markup
                     }
                     return;
                 }
-                if (cur is IList list && !(cur is string) && !pi.CanWrite)
+                if (cur is IList list && !(cur is string))
                 {
-                    foreach (var c in children) { var item = Build(c, null, target as FrameworkElement); if (item != null) list.Add(ConvertForList(cur, item)); }
+                    // 컬렉션 속성: 자식이 컬렉션 자체(같은 형식)면 대입, 아니면 항목으로 추가 (Setters · Triggers · RowDefinitions …)
+                    var built = children.Select(c => Build(c, null, target as FrameworkElement)).Where(x => x != null).ToList();
+                    if (built.Count == 1 && pi.CanWrite && pi.PropertyType.IsInstanceOfType(built[0])) { pi.SetValue(target, built[0]); return; }
+                    foreach (var item in built) list.Add(ConvertForList(cur, item!));
                     return;
                 }
                 if (cur != null && !pi.CanWrite)
@@ -424,7 +427,7 @@ namespace System.Windows.Markup
                 if (name.Contains('.'))
                 {
                     var dot = name.IndexOf('.');
-                    var ownerType = XamlTypes.Resolve(el.GetNamespaceOfPrefix("")?.NamespaceName ?? XamlTypes.NsPresentation, name.Substring(0, dot)) ?? XamlTypes.Resolve(XamlTypes.NsPresentation, name.Substring(0, dot));
+                    var ownerType = XamlTypes.Resolve(el.GetDefaultNamespace().NamespaceName, name.Substring(0, dot)) ?? XamlTypes.Resolve(XamlTypes.NsPresentation, name.Substring(0, dot));
                     if (ownerType == null) { Warn(el, $"알 수 없는 부착 속성 {name}"); return; }
                     object? v = value.StartsWith("{") && !value.StartsWith("{}") ? Evaluate(value, target, el, typeof(object)) : value;
                     SetAttached(target, ownerType, name.Substring(dot + 1), v, el);

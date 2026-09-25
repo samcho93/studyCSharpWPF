@@ -149,17 +149,32 @@ namespace System.Windows.Data
             _updating = true;
             try
             {
-                object? v;
-                if (_source == null) v = ParentBinding.FallbackValue;
-                else v = GetPathValue(_source, ParentBinding.Path);
-                var targetType = TargetType();
-                if (ParentBinding.Converter != null) v = ParentBinding.Converter.Convert(v, targetType, ParentBinding.ConverterParameter, ParentBinding.ConverterCulture ?? CultureInfo.CurrentCulture);
-                if (v == null && ParentBinding.TargetNullValue != null) v = ParentBinding.TargetNullValue;
-                if (ParentBinding.StringFormat != null && (targetType == typeof(string) || targetType == typeof(object)))
+                object? v = null;
+                bool resolved = _source != null;
+                if (resolved)
                 {
-                    var fmt = ParentBinding.StringFormat;
-                    if (!fmt.Contains("{")) fmt = "{0:" + fmt + "}";
-                    v = v == null ? "" : string.Format(CultureInfo.CurrentCulture, fmt, v);
+                    var parts = SplitPath(ParentBinding.Path);
+                    object? cur = _source;
+                    foreach (var p in parts) { if (cur == null) { resolved = false; break; } cur = GetMember(cur, p); }
+                    v = resolved ? cur : null;
+                }
+                var targetType = TargetType();
+                if (!resolved)
+                {
+                    // 경로를 끝까지 따라갈 수 없으면(원본 없음 · 중간이 null) FallbackValue
+                    v = ParentBinding.FallbackValue;
+                    if (v == null && targetType == typeof(string)) v = "";
+                }
+                else
+                {
+                    if (ParentBinding.Converter != null) v = ParentBinding.Converter.Convert(v, targetType, ParentBinding.ConverterParameter, ParentBinding.ConverterCulture ?? CultureInfo.CurrentCulture);
+                    if (v == null && ParentBinding.TargetNullValue != null) v = ParentBinding.TargetNullValue;
+                    if (ParentBinding.StringFormat != null && (targetType == typeof(string) || targetType == typeof(object)))
+                    {
+                        var fmt = ParentBinding.StringFormat;
+                        if (!fmt.Contains("{")) fmt = "{0:" + fmt + "}";
+                        v = v == null ? "" : string.Format(CultureInfo.CurrentCulture, fmt, v);
+                    }
                 }
                 if (ReferenceEquals(v, Binding.DoNothing)) return;
                 Target.SetPropertyValue(TargetProperty, v, fromStyle: false);

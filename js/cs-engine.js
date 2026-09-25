@@ -125,6 +125,7 @@
   /** 워커의 동기 요청(메시지 박스 · 파일 대화상자 · 모달 창) 처리 */
   function handleSync(m) {
     const reply = (value) => { if (!m.noWait) sendSync({ kind: 'result', value }); };
+    if (m.kind === 'line') return;   // 입력 줄은 waitInput → pumpInput 경로로 보낸다
     const R = window.WpfRender;
     if (m.kind === 'msgbox') { if (R) R.messageBox(JSON.parse(m.payload), reply); else reply('OK'); return; }
     if (m.kind === 'filedialog') { if (R) R.fileDialog(JSON.parse(m.payload), reply); else reply(''); return; }
@@ -145,6 +146,7 @@
 
   // ------------------------------------------------------------------ 컴파일 · 실행
   E.compile = async function (files) {
+    if (run) E.stop();   // 실행 중(WPF 창이 열린 채)이면 먼저 중지 — 새 워커에서 컴파일한다
     await E.load();
     return new Promise((resolve, reject) => {
       const id = 'c' + (++rid);
@@ -157,8 +159,9 @@
    * 실행. h: { stdin, onOutput(s,text), onWaitInput(on), onNoInput(), onEcho(line), onControl(text) }
    * @returns {Promise<{exit:number, ms:number, killed?:boolean}>}
    */
-  E.run = function (h) {
+  E.run = async function (h) {
     if (run) E.stop();
+    await E.load();
     inputQueue = [];
     if (h.stdin) { h.stdin.replace(/\r/g, '').split('\n').forEach((l, i, a) => { if (!(i === a.length - 1 && l === '')) inputQueue.push(l); }); }
     return new Promise((resolve) => {
