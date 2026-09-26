@@ -24,6 +24,9 @@
   let hostTarget = null, bare = false, designMode = false;
   function setHost(el, opts) {
     appExit();
+    // 이전 자리를 비운다 — 안 비우면 id="wpfDesktop" 인 요소가 둘이 되어
+    // 다음 실행 창이 숨겨진 쪽(디자인 화면)으로 들어간다
+    if (host && host !== el) host.innerHTML = '';
     hostTarget = el || null;
     bare = !!(opts && opts.bare);
     host = null; desktop = null; taskbar = null;

@@ -624,6 +624,9 @@
     if (D._mark) { D._mark.clear(); D._mark = null; }
     WpfRender.setDesignMode(false);
     WpfRender.setHost(null);
+    if (surface) surface.innerHTML = '';
+    overlay = null;
+    D.selected = null;
   }
 
   window.CsDesigner = { open, close, get isOpen() { return D.on; }, refresh: rerender };
