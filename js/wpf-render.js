@@ -20,18 +20,32 @@
   const KO = { OK: '확인', Cancel: '취소', Yes: '예', No: '아니요' };
 
   // ================================================================== 초기화
+  // 디자이너는 같은 렌더러를 다른 자리(디자인 화면)에 그린다 → 실행 창과 화면이 정확히 같다
+  let hostTarget = null, bare = false, designMode = false;
+  function setHost(el, opts) {
+    appExit();
+    hostTarget = el || null;
+    bare = !!(opts && opts.bare);
+    host = null; desktop = null; taskbar = null;
+  }
+  function setDesignMode(on) {
+    designMode = !!on;
+    if (desktop) desktop.classList.toggle('wpf-designing', designMode);
+  }
   function ensureHost() {
     if (host) return host;
-    host = $('wpfHost');
+    host = hostTarget || $('wpfHost');
     if (!host) return null;
-    host.innerHTML = `<div class="wpf-bar"><span class="wpf-bar-title">🪟 WPF 창</span><span class="spacer"></span>
+    host.innerHTML = (bare ? '' : `<div class="wpf-bar"><span class="wpf-bar-title">🪟 WPF 창</span><span class="spacer"></span>
       <button class="btn small ghost" data-wpf="zoom" title="창 영역 크게 보기 / 원래대로">⛶ 크게</button>
-      <button class="btn small ghost" data-wpf="closeAll" title="모든 창 닫기 (프로그램 종료)">✕ 모두 닫기</button></div>
-      <div class="wpf-desktop" id="wpfDesktop"><div class="wpf-taskbar" id="wpfTaskbar"></div></div>`;
+      <button class="btn small ghost" data-wpf="closeAll" title="모든 창 닫기 (프로그램 종료)">✕ 모두 닫기</button></div>`) +
+      `<div class="wpf-desktop${designMode ? ' wpf-designing' : ''}" id="wpfDesktop"><div class="wpf-taskbar" id="wpfTaskbar"></div></div>`;
     desktop = $('wpfDesktop');
     taskbar = $('wpfTaskbar');
-    host.querySelector('[data-wpf="zoom"]').onclick = () => toggleZoom();
-    host.querySelector('[data-wpf="closeAll"]').onclick = () => { for (const id of [...windows.keys()]) send(id, 'close', {}); };
+    if (!bare) {
+      host.querySelector('[data-wpf="zoom"]').onclick = () => toggleZoom();
+      host.querySelector('[data-wpf="closeAll"]').onclick = () => { for (const id of [...windows.keys()]) send(id, 'close', {}); };
+    }
     desktop.addEventListener('mousemove', (e) => {
       if (mouseStateT) return;
       mouseStateT = setTimeout(() => { mouseStateT = 0; }, 40);
@@ -52,7 +66,7 @@
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('wpf-zoom') && !document.querySelector('.wpf-modal')) toggleZoom(false); });
 
-  function send(id, name, args) { if (window.CsEngine) CsEngine.uiEvent(id, name, Object.assign({ name }, args || {})); }
+  function send(id, name, args) { if (designMode) return; if (window.CsEngine) CsEngine.uiEvent(id, name, Object.assign({ name }, args || {})); }
 
   // ================================================================== 명령 적용
   function apply(ops) {
@@ -915,5 +929,14 @@
     setTimeout(() => inp.focus(), 30);
   }
 
-  window.WpfRender = { apply, appExit, beginRun, waitDialog, messageBox, fileDialog, toggleZoom, hasWindows: () => windows.size > 0 };
+  window.WpfRender = {
+    apply, appExit, beginRun, waitDialog, messageBox, fileDialog, toggleZoom,
+    hasWindows: () => windows.size > 0,
+    // 디자이너용
+    setHost, setDesignMode,
+    nodeOf: (id) => { const e = els.get(id); return e ? e.dom : null; },
+    frameOf: (id) => { const w = windows.get(id); return w ? w.frame : null; },
+    clientOf: (id) => { const w = windows.get(id); return w ? w.frame.querySelector('.wpf-client') : null; },
+    idOfNode: (node) => { const el = node && node.closest ? node.closest('.wpf-el') : null; return el ? +el.dataset.id : null; },
+  };
 })();

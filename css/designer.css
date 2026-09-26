@@ -1,0 +1,74 @@
+/* XAML 비주얼 디자이너 — 도구 상자 · 디자인 화면 · 속성 창 */
+
+/* 디자인 중에는 오른쪽 실행 패널을 접어 화면을 넓게 쓴다 */
+body.designing .layout { grid-template-columns: var(--nav-w) 5px minmax(360px, 1fr) 0 0; }
+body.designing.nav-off .layout,
+body.designing .layout.nav-collapsed { grid-template-columns: 0 0 minmax(360px, 1fr) 0 0; }
+body.designing #output, body.designing .gutter[data-resize="out"] { display: none; }
+
+.designer-pane { flex: 1; min-height: 0; display: grid; grid-template-columns: 148px minmax(220px, 1fr) 228px; background: var(--bg); }
+.designer-pane.hidden { display: none; }
+@media (max-width: 1150px) { .designer-pane { grid-template-columns: 116px minmax(180px, 1fr) 190px; } .dsn-bar .muted { display: none; } }
+@media (max-width: 900px) { .designer-pane { grid-template-columns: 96px minmax(150px, 1fr) 170px; } }
+
+/* ---------------------------------------------------------- 도구 상자 */
+.dsn-toolbox { border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 6px 20px; background: var(--pane); }
+.dsn-tgroup { font-size: 11.5px; font-weight: 700; color: var(--muted); margin: 10px 4px 5px; letter-spacing: .02em; }
+.dsn-tgroup:first-child { margin-top: 2px; }
+.dsn-titems { display: flex; flex-direction: column; gap: 3px; }
+.dsn-tool { display: flex; align-items: center; gap: 7px; width: 100%; padding: 5px 7px; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--fg); font: inherit; font-size: 12.5px; cursor: grab; text-align: left; }
+.dsn-tool span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsn-tool:hover { background: var(--hover); border-color: var(--line); }
+.dsn-tool:active { cursor: grabbing; }
+
+/* ---------------------------------------------------------- 가운데 디자인 화면 */
+.dsn-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.dsn-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); flex: none; font-size: 12.5px; }
+.dsn-bar b { font-size: 13px; }
+.dsn-status { font-size: 12px; color: var(--muted); }
+.dsn-status.ok { color: var(--ok); }
+.dsn-status.warn { color: var(--warn); }
+.dsn-surface { flex: 1; min-height: 0; overflow: auto; position: relative;
+  background-color: var(--code-bg);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 16px 16px; background-position: -1px -1px; }
+.dsn-surface .wpf-desktop { background: none; min-height: 100%; }
+.dsn-empty { padding: 28px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+
+/* 디자인 중에는 창의 버튼 · 작업 표시줄을 감춰 화면만 보이게 한다 */
+.dsn-surface .wpf-taskbar { display: none; }
+.dsn-surface .wpf-frame { box-shadow: 0 10px 34px rgba(0, 0, 0, .22); }
+.dsn-surface .wpf-client { cursor: default; }
+
+/* ---------------------------------------------------------- 선택 표시 */
+.dsn-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
+.dsn-sel { position: absolute; outline: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); pointer-events: none; }
+.dsn-tag { position: absolute; left: 0; top: -19px; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 5px 5px 5px 0; background: var(--accent); color: #fff; white-space: nowrap; }
+.dsn-handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--accent); border-radius: 2px; pointer-events: auto; }
+.dsn-handle.h-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.dsn-handle.h-n { left: calc(50% - 4.5px); top: -5px; cursor: ns-resize; }
+.dsn-handle.h-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.dsn-handle.h-e { right: -5px; top: calc(50% - 4.5px); cursor: ew-resize; }
+.dsn-handle.h-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.dsn-handle.h-s { left: calc(50% - 4.5px); bottom: -5px; cursor: ns-resize; }
+.dsn-handle.h-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.dsn-handle.h-w { left: -5px; top: calc(50% - 4.5px); cursor: ew-resize; }
+
+.dsn-ghost { position: fixed; z-index: 9999; pointer-events: none; padding: 4px 9px; border-radius: 6px; background: var(--accent); color: #fff; font-size: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
+
+/* 편집기에서 선택한 요소의 XAML 을 표시 */
+.CodeMirror .dsn-src { background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 3px; }
+
+/* ---------------------------------------------------------- 속성 창 */
+.dsn-props { border-left: 1px solid var(--line); overflow-y: auto; padding: 8px 9px 22px; background: var(--pane); font-size: 12.5px; }
+.dsn-ptitle { font-size: 13.5px; padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.dsn-pgroup { font-size: 11.5px; font-weight: 700; color: var(--muted); margin: 12px 2px 5px; }
+.dsn-field { display: grid; grid-template-columns: 1fr 1.15fr; align-items: center; gap: 6px; margin-bottom: 4px; }
+.dsn-field > span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsn-field input[type="text"], .dsn-field input[type="number"], .dsn-field select { width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; min-width: 0; }
+.dsn-field input[type="checkbox"] { justify-self: start; width: 15px; height: 15px; }
+.dsn-color { display: flex; gap: 4px; min-width: 0; }
+.dsn-color input[type="color"] { width: 26px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; flex: none; }
+.dsn-color input[type="text"] { flex: 1; min-width: 0; }
+.dsn-props .btn { width: 100%; margin-top: 8px; }
+.dsn-hint { color: var(--muted); padding: 10px 2px; line-height: 1.6; }

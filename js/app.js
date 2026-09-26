@@ -168,6 +168,8 @@
   }
 
   app.runCode = function (code, opts = {}) {
+    // 디자이너가 렌더러를 쓰고 있으면 먼저 닫는다 (실행 창은 오른쪽 패널에 떠야 한다)
+    if (window.CsDesigner && CsDesigner.isOpen) setView('doc');
     app.activeEditor = opts.editor || null;
     return app.console.execute(code, {
       label: opts.label,
@@ -328,8 +330,16 @@
     document.querySelectorAll('.view-switch button').forEach((b) => b.classList.toggle('active', b.dataset.view === app.view));
     const isSection = r.type === 'section';
     const slides = isSection && app.view === 'slides';
+    const design = isSection && app.view === 'designer';
     $('docView').classList.toggle('hidden', slides);
     $('slideView').classList.toggle('hidden', !slides);
+    // 디자이너: 문서 자리에 디자인 화면을 놓고, 아래 편집기(XAML)는 그대로 둔다
+    $('content').classList.toggle('hidden', design);
+    $('designerPane').classList.toggle('hidden', !design);
+    if (window.CsDesigner) {
+      if (design) setTimeout(() => CsDesigner.open(app.editor.cm), 0);
+      else if (CsDesigner.isOpen) CsDesigner.close();
+    }
     document.querySelector('.view-switch').style.visibility = isSection ? 'visible' : 'hidden';
     $('prevBtn').style.visibility = isSection ? 'visible' : 'hidden';
     $('nextBtn').style.visibility = isSection ? 'visible' : 'hidden';

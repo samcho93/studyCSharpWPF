@@ -41,6 +41,7 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/slides.css">
   <link rel="stylesheet" href="css/wpf.css">
+  <link rel="stylesheet" href="css/designer.css">
 </head>
 <body>
   <div id="app" class="layout">
@@ -82,6 +83,7 @@
         <div class="view-switch" role="group" aria-label="보기 방식">
           <button data-view="doc" title="문서 보기">📄 문서</button>
           <button data-view="slides" title="슬라이드 보기 (PPT)">🖼️ 슬라이드</button>
+          <button data-view="designer" title="XAML 디자이너 (컨트롤을 끌어다 화면 만들기)">🎨 디자이너</button>
         </div>
         <button id="prevBtn" class="btn ghost small" title="이전 교시">◀</button>
         <button id="nextBtn" class="btn ghost small" title="다음 교시">▶</button>
@@ -90,6 +92,15 @@
       <!-- 문서 보기 -->
       <div id="docView" class="doc-view">
         <div id="content" class="content" tabindex="-1"></div>
+        <!-- XAML 디자이너: 도구 상자 · 디자인 화면 · 속성 창 (아래 편집기의 XAML 과 실시간으로 연결된다) -->
+        <div id="designerPane" class="designer-pane hidden">
+          <div id="dsnToolbox" class="dsn-toolbox"></div>
+          <div class="dsn-main">
+            <div class="dsn-bar"><b>🎨 디자인 화면</b><span class="muted">컨트롤을 끌어다 놓고, 클릭해 고르고, 더블클릭하면 이벤트 처리기가 만들어집니다</span><span class="spacer"></span><span id="dsnStatus" class="dsn-status"></span></div>
+            <div id="dsnSurface" class="dsn-surface"></div>
+          </div>
+          <div id="dsnProps" class="dsn-props"></div>
+        </div>
         <div class="hgutter" data-resize="editor" title="드래그하여 높이 조절"></div>
         <section id="editorPane" class="editor-pane">
           <div class="editor-bar">
@@ -235,6 +246,8 @@
   <script src="js/highlight.js"></script>
   <script src="js/cs-engine.js"></script>
   <script src="js/wpf-render.js"></script>
+  <script src="js/xaml-doc.js"></script>
+  <script src="js/designer.js"></script>
   <script src="js/runner.js"></script>
   <script src="js/slides.js"></script>
   <script src="js/app.js"></script>
