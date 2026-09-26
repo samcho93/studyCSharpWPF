@@ -35,8 +35,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Embedder-Policy', 'require-corp')
         self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
-        # 실행 환경(약 30MB)는 오래 캐시, 나머지는 매번 확인
-        self.send_header('Cache-Control', 'max-age=604800' if '/runtime/' in self.path else 'no-cache')
+        # 실행 환경 파일은 이름에 지문이 붙어 바뀔 때마다 이름도 바뀌므로 오래 캐시해도 안전하다.
+        # 다만 파일 목록(blazor.boot.json · manifest.json)까지 캐시하면 새로 배포한 뒤 옛 목록을 들고
+        # 없어진 파일을 찾게 되므로(404) 목록은 매번 확인한다.
+        path = self.path.split('?', 1)[0]
+        listing = path.endswith('blazor.boot.json') or path.endswith('manifest.json')
+        cacheable = '/runtime/' in path and not listing
+        self.send_header('Cache-Control', 'max-age=604800, immutable' if cacheable else 'no-cache')
         super().end_headers()
 
 

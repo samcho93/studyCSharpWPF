@@ -95,12 +95,26 @@ async function init(m) {
   const progress = (name) => { loadedBytes += sizes[name] || 0; count++; post({ type: 'status', message: `런타임 내려받는 중… ${(loadedBytes / 1048576).toFixed(1)} / ${(totalBytes / 1048576).toFixed(1)} MB`, pct: Math.min(99, Math.round(loadedBytes / totalBytes * 100)) }); };
 
   post({ type: 'status', message: '.NET 런타임 준비 중…', pct: 0 });
+  /**
+   * 런타임 파일 받기. 브라우저에 남은 옛 목록 때문에 404 가 나면 캐시를 무시하고 한 번 더 받는다.
+   * (배포로 파일 이름이 바뀌었는데 예전 blazor.boot.json 이 캐시에 남은 경우)
+   */
+  async function fetchAsset(url, name) {
+    let res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) res = await fetch(url, { cache: 'reload' });
+    if (!res.ok) {
+      const err = new Error(`${name || url} 을 내려받지 못했습니다 (${res.status}). 브라우저에 남은 옛 실행 환경 목록 때문일 수 있습니다.`);
+      err.stale = true;
+      throw err;
+    }
+    return res;
+  }
   // .NET 9: 파일 이름에 지문(fingerprint)이 붙는다 → 논리 이름(System.Runtime.dll) 으로 되돌리는 표
   let fp = {};
   // 배포할 때마다 파일 지문이 바뀌므로, 설정 파일(blazor.boot.json)은 manifest 내용으로 만든 버전을 붙여 캐시를 피한다
   let stamp = 0; for (const f of manifest.files) for (let i = 0; i < f.name.length; i++) stamp = (stamp * 31 + f.name.charCodeAt(i)) | 0;
   const bootUrl = base + '_framework/blazor.boot.json?v=' + (stamp >>> 0).toString(36);
-  try { const boot = await (await fetch(bootUrl, { cache: 'no-cache' })).json(); fp = (boot.resources && boot.resources.fingerprinting) || {}; } catch (e) { /* 무시 */ }
+  try { const boot = await (await fetch(bootUrl, { cache: 'reload' })).json(); fp = (boot.resources && boot.resources.fingerprinting) || {}; } catch (e) { /* 무시 */ }
   const logical = (f) => (fp[f] || f);
   const { dotnet } = await import(base + '_framework/dotnet.js');
   runtime = await dotnet
@@ -112,8 +126,7 @@ async function init(m) {
       const fname = name.split('/').pop();
       const gz = gzSet.has(fname) || gzSet.has(name);
       return (async () => {
-        const res = await fetch(gz ? defaultUri + '.gz' : defaultUri, { cache: 'force-cache' });
-        if (!res.ok) throw new Error(`${name} 을 내려받지 못했습니다 (${res.status})`);
+        const res = await fetchAsset(gz ? defaultUri + '.gz' : defaultUri, name);
         const buf = gz ? await gunzip(res) : await res.arrayBuffer();
         progress(fname);
         if (type === 'assembly' || type === 'core-assembly' || type === 'coreAssembly') {
@@ -147,7 +160,7 @@ async function init(m) {
       const cand = manifest.files.find((f) => logical(f.name) === n + '.dll' || logical(f.name) === n + '.wasm');
       if (!cand) continue;
       try {
-        const res = await fetch(base + '_framework/' + cand.name + (cand.gz ? '.gz' : ''), { cache: 'force-cache' });
+        const res = await fetchAsset(base + '_framework/' + cand.name + (cand.gz ? '.gz' : ''), n);
         if (!res.ok) continue;
         bytes = new Uint8Array(cand.gz ? await gunzip(res) : await res.arrayBuffer());
       } catch (e) { continue; }

@@ -67,6 +67,17 @@
     return readyP;
   };
 
+  /**
+   * 실행 환경을 처음부터 다시 받는다.
+   * 배포로 파일 이름이 바뀌었는데 브라우저에 옛 목록이 남아 404 가 날 때 쓴다.
+   */
+  E.reset = async function () {
+    try { if (worker) worker.terminate(); } catch (e) { /* 무시 */ }
+    worker = null; readyP = null; manifest = null;
+    try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch (e) { /* 무시 */ }
+    location.reload();
+  };
+
   function onMessage(m, resolveInit, rejectInit) {
     switch (m.type) {
       case 'status': E.set('loading', m.message, m.pct); break;

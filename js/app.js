@@ -668,7 +668,8 @@
     openModal('C# 실행 환경', `
       <div class="table-wrap"><table><tbody>
         <tr><th>런타임 · 컴파일러</th><td>.NET 9 (mono WebAssembly) · Roslyn C# 13 · WPF 호환 라이브러리(WpfShim)<br><b>${esc(st)}</b>
-          <div style="margin-top:6px"><button class="btn small" id="engLoad" ${E && E.state !== 'idle' && E.state !== 'error' ? 'disabled' : ''}>지금 준비하기</button></div></td></tr>
+          <div style="margin-top:6px"><button class="btn small" id="engLoad" ${E && E.state !== 'idle' && E.state !== 'error' ? 'disabled' : ''}>지금 준비하기</button>
+          <button class="btn small ghost" id="engReset" title="브라우저에 저장된 실행 환경을 지우고 처음부터 다시 받습니다">↻ 실행 환경 다시 받기</button></div></td></tr>
         <tr><th>실행 중 입력(ReadLine)</th><td>${ok(E && E.interactive())} — ${E && E.interactive() ? '프로그램이 입력을 기다리면 콘솔 입력칸에 입력합니다. MessageBox · ShowDialog 도 진짜로 기다립니다.' : '이 창에서는 실행 전에 입력을 미리 받고, MessageBox 는 기다리지 않고 기본값을 돌려줍니다. (새로고침하면 켜질 수 있습니다)'}</td></tr>
         <tr><th>WPF</th><td>${ok(true)} — Window · 레이아웃 · 컨트롤 · 이벤트 · 바인딩 · 스타일 · MVVM · 타이머 등 강좌에서 다루는 기능을 브라우저 화면에 그립니다. (ControlTemplate · 3D · 일부 고급 기능은 미지원)</td></tr>
         <tr><th>파일 입출력</th><td>${ok(true)} — 브라우저 메모리 안의 <b>작업 폴더</b> (새로고침하면 비워짐)</td></tr>
@@ -683,6 +684,8 @@
       <code>index.html</code> 을 더블클릭해 파일로 열면(<code>file://</code>) 실행 환경을 불러올 수 없습니다.</p>`);
     const lb = $('engLoad');
     if (lb) lb.onclick = () => { lb.disabled = true; lb.textContent = '준비 중…'; E.load().then(serverModal, serverModal); };
+    const rb = $('engReset');
+    if (rb) rb.onclick = () => { rb.disabled = true; rb.textContent = '다시 받는 중…'; E.reset(); };
     $('optWarn').onchange = (e) => store.set('cs.showWarnings', e.target.checked ? '1' : '0');
     $('optKeep').onchange = (e) => store.set('cs.keepConsole', e.target.checked ? '1' : '0');
     $('optPre').onchange = (e) => store.set('cs.preload', e.target.checked ? '1' : '0');
