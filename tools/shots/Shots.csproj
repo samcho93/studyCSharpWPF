@@ -11,4 +11,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+  <!-- work/ 는 예제마다 만드는 임시 WPF 프로젝트 폴더다. 이 도구의 소스로 딸려 들어가지 않게 막는다
+       (빌드에 실패한 예제의 폴더가 남으면 그 뒤의 모든 캡처가 함께 실패한다) -->
+  <ItemGroup>
+    <Compile Remove="work/**" />
+    <None Remove="work/**" />
+    <EmbeddedResource Remove="work/**" />
+    <Page Remove="work/**" />
+  </ItemGroup>
 </Project>

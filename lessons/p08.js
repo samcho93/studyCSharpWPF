@@ -2329,7 +2329,7 @@ ${SAVE_TOP}
         </StackPanel>
         <TextBlock Text="{Binding RemainText}" FontSize="52" FontFamily="Consolas"
                    HorizontalAlignment="Center" Margin="0,8,0,4"/>
-        <ProgressBar Value="{Binding Progress}" Maximum="100" Height="16"/>
+        <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="100" Height="16"/>
         <UniformGrid Columns="2" Margin="0,12,0,0">
             <Button Content="시작" Command="{Binding StartCommand}" Height="34" Margin="3"/>
             <Button Content="리셋" Command="{Binding ResetCommand}" Height="34" Margin="3"/>

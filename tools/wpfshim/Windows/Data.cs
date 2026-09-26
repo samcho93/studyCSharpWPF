@@ -95,8 +95,21 @@ namespace System.Windows.Data
             {
                 if (ParentBinding.Mode == BindingMode.TwoWay || ParentBinding.Mode == BindingMode.OneWayToSource) return true;
                 if (ParentBinding.Mode != BindingMode.Default) return false;
-                // WPF 기본값: 사용자가 바꾸는 속성은 TwoWay
-                return TargetProperty is "Text" or "IsChecked" or "Value" or "SelectedItem" or "SelectedIndex" or "SelectedValue" or "SelectedDate" or "Password" or "IsExpanded" or "IsSelected";
+                // WPF 기본값(BindsTwoWayByDefault): 속성 이름만이 아니라 컨트롤 종류로 정해진다.
+                // 예: TextBox.Text 는 TwoWay 지만 TextBlock.Text 는 OneWay 다.
+                var t = Target;
+                return TargetProperty switch
+                {
+                    "Text" => t is Controls.TextBoxBase || t is Controls.ComboBox,
+                    "Password" => t is Controls.PasswordBox,
+                    "Value" => t is Controls.RangeBase,
+                    "IsChecked" => t is Controls.ToggleButton || t is Controls.MenuItem,
+                    "SelectedItem" or "SelectedIndex" or "SelectedValue" => t is Controls.Selector,
+                    "SelectedDate" => t is Controls.DatePicker,
+                    "IsExpanded" => t is Controls.Expander || t is Controls.TreeViewItem,
+                    "IsSelected" => t is Controls.ListBoxItem || t is Controls.TreeViewItem || t is Controls.TabItem,
+                    _ => false,
+                };
             }
         }
 
@@ -135,6 +148,7 @@ namespace System.Windows.Data
             // DataContext 자체를 바인딩하면 원본은 부모의 DataContext (자기 자신이 아니다)
             else if (TargetProperty == "DataContext") _source = Target.ParentElement?.DataContext;
             else _source = Target.DataContext;
+            CheckWritable();
             if (ParentBinding.Mode != BindingMode.OneWayToSource) UpdateTarget();
             if (ParentBinding.Mode == BindingMode.OneTime) { _oneTimeDone = _source != null; return; }
             // 경로상의 각 객체를 구독 (데이터 객체는 INotifyPropertyChanged, 요소는 속성 변경 알림)
@@ -219,6 +233,25 @@ namespace System.Windows.Data
             catch (Exception ex) { Bridge.Write(2, $"[바인딩 오류] {TargetProperty} ← {ParentBinding.Path}: {ex.Message}\n"); }
             finally { _updating = false; }
         }
+
+        /// <summary>
+        /// TwoWay · OneWayToSource 인데 원본 속성에 public set 이 없으면 실제 WPF 처럼 예외를 낸다.
+        /// (예: ProgressBar · Slider 의 Value 는 기본이 TwoWay 라서 { get; private set; } 속성에 묶으면 실행 중 오류)
+        /// </summary>
+        private void CheckWritable()
+        {
+            if (!IsTwoWay || _source == null || _checkedWritable) return;
+            var parts = SplitPath(ParentBinding.Path);
+            if (parts.Count == 0) return;
+            object? cur = _source;
+            for (int i = 0; i < parts.Count - 1; i++) { cur = GetMember(cur, parts[i]); if (cur == null) return; }
+            var pi = cur!.GetType().GetProperty(parts[parts.Count - 1], BindingFlags.Public | BindingFlags.Instance);
+            if (pi == null) return;                       // 경로 오류는 UpdateTarget 이 알린다
+            _checkedWritable = true;
+            if (pi.GetSetMethod(false) == null)
+                throw new InvalidOperationException($"TwoWay 또는 OneWayToSource 바인딩은 '{cur.GetType().FullName}' 형식의 읽기 전용 속성 '{pi.Name}'에서 작동하지 않습니다.");
+        }
+        private bool _checkedWritable;
 
         /// <summary>UI 에서 바뀐 값을 원본에 쓴다</summary>
         public void UpdateSource() => UpdateSource(Target.GetPropertyValue(TargetProperty));

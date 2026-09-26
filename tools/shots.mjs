@@ -21,7 +21,8 @@ let only = null, force = false;
 const ids = [];
 for (let i = 0; i < args.length; i++) { if (args[i] === '--only') only = args[++i]; else if (args[i] === '--force') force = true; else ids.push(args[i]); }
 
-const isWpf = (code) => /<Window\b|<UserControl\b|<Application\b/.test(code || '') || /System\.Windows/.test(code || '');
+// 창을 띄우는 예제만 캡처한다 (System.Windows.Input.ICommand 만 쓰는 콘솔 예제는 제외)
+const isWpf = (code) => /<Window\b|<UserControl\b/.test(code || '') || /\bnew Window\s*[({]|:\s*Window\b/.test(code || '');
 const ctx = { console }; ctx.window = ctx; vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/course.js'), 'utf8'), ctx, { filename: 'course.js' });
 const course = ctx.CS_COURSE;
